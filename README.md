@@ -4,8 +4,8 @@
  - Create a virtual environment with Python 3.10:
    `python3.10 -m venv .venv`
 - Activate it
-- Install requirements
-  `pip install -r requirements.txt`
+- Install requirements from backend:
+  `pip install -r search-engine/requirements.txt`
 
 
 # How to run:
