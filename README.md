@@ -1,10 +1,12 @@
-# NLP Search Engine
+# Search-based Chatbot
 
-## Members:
-- Sabin-Mario Deaconescu
-- Bianca-Daniela Popa
-- Anastasia Ștefănescu
-- David-Constantin Berbece
+# Setup
+ - Create a virtual environment with Python 3.10:
+   `python3.10 -m venv .venv`
+- Activate it
+- Install requirements
+  `pip install -r requirements.txt`
+
 
 # How to run:
 
