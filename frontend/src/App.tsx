@@ -7,7 +7,7 @@ import {SelectDocument, PdfViewer, Chat} from "./components";
 import SearchPanel from "./components/SearchPanel";
 import {assert_error} from "./assertions.ts";
 import type {DragEvent} from "react";
-import {upload} from "./utils/api.ts";
+import {uploadEndpoint} from "./utils/api.ts";
 import {IoChatboxOutline} from "react-icons/io5";
 import {FaSearch} from "react-icons/fa";
 
@@ -49,7 +49,7 @@ function App() {
         formData.append("file", file);
 
         try {
-            const {session_id} = await upload(formData, {});
+            const {session_id} = await uploadEndpoint(formData, {});
             setSessionId(session_id);
         } catch (error: unknown) {
             if(!assert_error(error)) return;
@@ -92,7 +92,7 @@ function App() {
                 />
 
                 {pdfFile && session_id && (
-                    <div className={"flex flex-row gap-10 h-min w-11/12 justify-center"}>
+                    <div className={"flex flex-row gap-10 h-min max-h-full w-11/12 justify-center p-10"}>
                         <PdfViewer
                             key={pdfFile.name + pdfFile.size}
                             file={pdfFile}
@@ -121,7 +121,7 @@ function App() {
                                      }
                                      className={"h-full"}
                                 >
-                                    <Chat setPdfFile={setPdfFile} handleNewDocument={handleNewDocument} />
+                                    <Chat setPdfFile={setPdfFile} handleNewDocument={handleNewDocument} session_id={session_id} />
                                 </Tab>
                                 <Tab key={"search"}
                                      title={
