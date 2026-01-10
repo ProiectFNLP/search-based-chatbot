@@ -18,7 +18,7 @@ export function PdfViewer({
                               setNumPages,
                           }: PdfViewerProps) {
     return (
-        <div className="w-1/2 max-w-3xl h-full bg-white p-4 rounded shadow-lg flex flex-col items-center">
+        <div className="w-1/2 max-w-3xl min-w-fit h-full bg-white p-4 rounded-xl shadow-lg flex flex-col items-center">
             <Document
                 file={file}
                 onLoadSuccess={({ numPages }) => setNumPages(numPages)}

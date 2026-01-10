@@ -2,12 +2,14 @@ import {useRef, useState} from "react";
 import {pdfjs} from "react-pdf";
 import "react-pdf/dist/esm/Page/AnnotationLayer.css";
 import "react-pdf/dist/esm/Page/TextLayer.css";
-import {addToast} from "@heroui/react";
+import {addToast, Tab, Tabs} from "@heroui/react";
 import {SelectDocument, PdfViewer, Chat} from "./components";
 import SearchPanel from "./components/SearchPanel";
 import {assert_error} from "./assertions.ts";
 import type {DragEvent} from "react";
 import {upload} from "./utils/api.ts";
+import {IoChatboxOutline} from "react-icons/io5";
+import {FaSearch} from "react-icons/fa";
 
 // Set worker source for pdf.js
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
@@ -69,45 +71,82 @@ function App() {
     };
 
     return (
-        <div className="h-screen max-h-screen flex flex-col items-center justify-center bg-gray-50 p-5">
-            {!(pdfFile && session_id) &&
-                <SelectDocument
-                    handleDrop={handleDrop}
-                    handleClick={handleNewDocument}
-                    setDragOver={setDragOver}
-                    dragOver={dragOver}
-                    loading={uploading}
+        <div className="h-screen max-h-screen bg-gray-50 p-5 flex overflow-y-scroll">
+            <div className={"flex flex-col items-center justify-center w-full h-full "}>
+                {!(pdfFile && session_id) &&
+                    <SelectDocument
+                        handleDrop={handleDrop}
+                        handleClick={handleNewDocument}
+                        setDragOver={setDragOver}
+                        dragOver={dragOver}
+                        loading={uploading}
+                    />
+                }
+                <input
+                    type="file"
+                    accept="application/pdf"
+                    multiple={false}
+                    ref={fileInputRef}
+                    className="hidden"
+                    onChange={(e) => handleFiles(e.target.files)}
                 />
-            }
-            <input
-                type="file"
-                accept="application/pdf"
-                multiple={false}
-                ref={fileInputRef}
-                className="hidden"
-                onChange={(e) => handleFiles(e.target.files)}
-            />
 
-            {pdfFile && session_id && (
-                <div className={"flex flex-row gap-4 h-min w-full justify-center overflow-y-scroll"}>
-                    <PdfViewer
-                        key={pdfFile.name + pdfFile.size}
-                        file={pdfFile}
-                        currentPage={currentPage}
-                        setCurrentPage={setCurrentPage}
-                        numPages={numPages}
-                        setNumPages={setNumPages}
-                    />
-                    <SearchPanel
-                        pdfFile={pdfFile}
-                        session_id={session_id}
-                        setCurrentPage={setCurrentPage}
-                        handleNewDocument={handleNewDocument}
-                        setPdfFile={setPdfFile}
-                    />
-                    <Chat />
-                </div>
-            )}
+                {pdfFile && session_id && (
+                    <div className={"flex flex-row gap-10 h-min w-11/12 justify-center"}>
+                        <PdfViewer
+                            key={pdfFile.name + pdfFile.size}
+                            file={pdfFile}
+                            currentPage={currentPage}
+                            setCurrentPage={setCurrentPage}
+                            numPages={numPages}
+                            setNumPages={setNumPages}
+                        />
+                        <div className="flex w-full flex-col h-full">
+                            <Tabs aria-label="Options"
+                                  classNames={{
+                                      tabList: "gap-6 w-full relative rounded-none p-0 border-b border-divider",
+                                      cursor: "w-full bg-primary-600",
+                                      tab: "max-w-fit px-0 h-12",
+                                      tabContent: "group-data-[selected=true]:text-primary-600",
+                                  }}
+                                  color="primary"
+                                  variant="underlined"
+                            >
+                                <Tab key={"chat"}
+                                     title={
+                                         <div className="flex items-center space-x-2">
+                                             <IoChatboxOutline />
+                                             <span>Chat</span>
+                                         </div>
+                                     }
+                                     className={"h-full"}
+                                >
+                                    <Chat setPdfFile={setPdfFile} handleNewDocument={handleNewDocument} />
+                                </Tab>
+                                <Tab key={"search"}
+                                     title={
+                                         <div className="flex items-center space-x-2">
+                                             <FaSearch />
+                                             <span>Search</span>
+                                         </div>
+                                     }
+                                     className={"h-full"}
+                                >
+                                    <SearchPanel
+                                        pdfFile={pdfFile}
+                                        session_id={session_id}
+                                        setCurrentPage={setCurrentPage}
+                                        handleNewDocument={handleNewDocument}
+                                        setPdfFile={setPdfFile}
+                                    />
+                                </Tab>
+                            </Tabs>
+                        </div>
+
+                    </div>
+                )}
+
+            </div>
 
         </div>
     )
