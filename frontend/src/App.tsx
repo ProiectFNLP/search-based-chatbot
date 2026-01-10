@@ -17,6 +17,7 @@ type SearchResults = {
     current: number,
     total: number,
     results: {
+        paragraph: number,
         page: number,
         score: number,
     }[]

@@ -1,7 +1,7 @@
 import json
 import os
 import shutil
-from typing import Generator
+from typing import Generator, Optional
 
 import fitz
 import torch
@@ -14,6 +14,7 @@ from src.datasets.tfidf_dataset import TfIdfChunkedDocumentDataset
 from src.query.search_bm25 import search_bm25
 from src.query.search_faiss import search_faiss
 from src.query.search_tfidf import search_tfidf
+from src.utils.cache import FileCache
 
 
 def clear_cache_dir(cache_path: str = "articles"):
@@ -35,8 +36,25 @@ def extract_text_from_pdf(contents: bytes) -> Generator[str, None, None]:
         text = page.get_text()
         yield text
 
+def extract_paragraphs_from_page(text: str) -> Generator[str, None, None]:
+    """
+    Extract paragraphs from a page.
+    :param text: The page text to extract paragraphs from.
+    :return: Generator yielding paragraphs from the page.
+    """
 
-def search_in_dataset(dataset: TfIdfChunkedDocumentDataset | DenseChunkedDocumentDataset | Bm25ChunkedDocumentDataset, search: str) -> Generator[str, None, None]:
+    paragraphs = text.split("\n\n")
+    for paragraph in paragraphs:
+        if paragraph.strip():
+            yield paragraph
+
+
+def search_in_dataset(
+    dataset: TfIdfChunkedDocumentDataset | DenseChunkedDocumentDataset | Bm25ChunkedDocumentDataset,
+    search: str,
+    file_cache: Optional[FileCache] = None  # FileCache to look up page/paragraph metadata
+) -> Generator[str, None, None]:
+
     if isinstance(dataset, TfIdfChunkedDocumentDataset):
         generator = search_tfidf(search, dataset)
     elif isinstance(dataset, DenseChunkedDocumentDataset):
@@ -48,13 +66,15 @@ def search_in_dataset(dataset: TfIdfChunkedDocumentDataset | DenseChunkedDocumen
 
     length = len(dataset)
 
-    for page, results in enumerate(generator):
+    for paragraph, results in enumerate(generator):
+        page_number = file_cache.get(f"paragraph_page_number:{paragraph}")
         data = {
             "results": [{
-                "page": int(result["id"]) + 1,
+                "paragraph": int(result["id"]) + 1,
+                "page": int(page_number) + 1,
                 "score": float(result["score"])
             } for result in results],
-            "current": page,
+            "current": paragraph,
             "total": length
         }
         yield f"data: {json.dumps(data)}\n\n"

@@ -22,7 +22,11 @@ from src.preprocessing.preprocess import preprocess_document
 from src.preprocessing.string_list_utils import preprocess_string_list
 from src.utils import pool_executor
 from src.utils.cache import make_hash, FileCache
-from src.utils.helpers import extract_text_from_pdf, search_in_dataset
+from src.utils.helpers import (
+    extract_text_from_pdf,
+    extract_paragraphs_from_page,
+    search_in_dataset
+)
 
 from src.datasets.tfidf_dataset import TfIdfChunkedDocumentDataset
 from src.datasets.dense_dataset import DenseChunkedDocumentDataset
@@ -73,10 +77,15 @@ async def upload(file: UploadFile = File(...), file_cache: FileCache = Depends(g
     content_pages = list(extract_text_from_pdf(contents))
     pdf_cache = file_cache.subcache(f"pdf:{file_hash}")
 
-    for i, page in enumerate(content_pages):
-        pdf_cache.set(f"documents:{i}", page)
+    paragraph_index = 0
+    for page_num, page in enumerate(content_pages):
+        paragraphs = list(extract_paragraphs_from_page(page))
+        pdf_cache.set(f"documents:{page_num}", page)
+        for j, paragraph in enumerate(paragraphs):
+            pdf_cache.set(f"paragraphs:{j}", paragraph)
 
-    pdf_cache.set("length", str(len(content_pages)))
+    pdf_cache.set("no_pages", str(len(content_pages)))
+    pdf_cache.set("length", str(paragraph_index))
     # preprocessed_pages = preprocess_string_list(content_pages)
 
     session_id = str(uuid.uuid4())
@@ -129,7 +138,7 @@ async def _search(session_id: str, search: str, file_cache: FileCache, mode: Lit
     else:
         raise HTTPException(status_code=400, detail="Invalid mode. Use 'tfidf' or 'faiss'.")
 
-    results = search_in_dataset(dataset, search)
+    results = search_in_dataset(dataset, search, file_cache)
 
     # Modify this
     return StreamingResponse(results, media_type="text/event-stream")
@@ -170,6 +179,5 @@ async def search_bm25(session_id: str, search: str, file_cache: FileCache = Depe
     """
 
     return await _search(session_id, search, file_cache, mode='bm25')
-
 
 
