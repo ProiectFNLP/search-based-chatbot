@@ -67,11 +67,11 @@ def search_in_dataset(
     length = len(dataset)
 
     for paragraph, results in enumerate(generator):
-        page_number = file_cache.get(f"paragraph_page_number:{paragraph}")
         data = {
             "results": [{
-                "paragraph": int(result["id"]) + 1,
-                "page": int(page_number) + 1,
+                "paragraph_id": int(result["id"]) + 1,
+                "paragraph": file_cache.get(f"paragraphs:{paragraph}"),
+                "page": int(file_cache.get(f"paragraph_page_number:{paragraph}")) + 1,
                 "score": float(result["score"])
             } for result in results],
             "current": paragraph,

@@ -8,13 +8,15 @@ import uuid
 from concurrent.futures import ProcessPoolExecutor
 from contextlib import asynccontextmanager
 from multiprocessing import Pool
-from typing import Literal
+from typing import Literal, Optional
+
+from external_services.llm_api import generate_response, generate_summary
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
-from src.constants import CHUNK_SIZE
+from src.constants import CHUNK_SIZE, MESSAGE_CONTEXT_WINDOW
 from src.datasets.dense_dataset import DenseChunkedDocumentDataset, DenseFileDocumentDataset
 from src.datasets.tfidf_dataset import TfIdfChunkedDocumentDataset, TfIdfFileDocumentDataset
 from src.dependencies import get_file_cache
@@ -25,7 +27,7 @@ from src.utils.cache import make_hash, FileCache
 from src.utils.helpers import (
     extract_text_from_pdf,
     extract_paragraphs_from_page,
-    search_in_dataset
+    search_in_dataset,
 )
 
 from src.datasets.tfidf_dataset import TfIdfChunkedDocumentDataset
@@ -140,8 +142,8 @@ async def _search(session_id: str, search: str, file_cache: FileCache, mode: Lit
 
     results = search_in_dataset(dataset, search, file_cache)
 
-    # Modify this
-    return StreamingResponse(results, media_type="text/event-stream")
+    return results
+
 
 
 @app.get("/search-tf-idf")
@@ -154,7 +156,8 @@ async def search_tfidf(session_id: str, search: str, file_cache: FileCache = Dep
     :return: A JSON response with the number of pages in the PDF.
     """
 
-    return await _search(session_id, search, file_cache, mode='tfidf')
+    results = await _search(session_id, search, file_cache, mode='tfidf')
+    return StreamingResponse(results, media_type="text/event-stream")
 
 
 @app.get("/search-faiss")
@@ -167,7 +170,8 @@ async def search_faiss(session_id: str, search: str, file_cache: FileCache = Dep
     :return: A JSON response with the search results.
     """
 
-    return await _search(session_id, search, file_cache, mode='faiss')
+    results = await _search(session_id, search, file_cache, mode='faiss')
+    return StreamingResponse(results, media_type="text/event-stream")
 
 @app.get("/search-bm25")
 async def search_bm25(session_id: str, search: str, file_cache: FileCache = Depends(get_file_cache)):
@@ -178,6 +182,70 @@ async def search_bm25(session_id: str, search: str, file_cache: FileCache = Depe
     :return: A JSON response with the search results.
     """
 
-    return await _search(session_id, search, file_cache, mode='bm25')
+    results = await _search(session_id, search, file_cache, mode='bm25')
+    return StreamingResponse(results, media_type="text/event-stream")
 
 
+@app.post("/send_prompt")
+async def send_prompt(
+    session_id: str,
+    prompt: str,
+    search_mode: Literal['tfidf', 'faiss', 'bm25'] = 'faiss',
+    file_cache: FileCache = Depends(get_file_cache)
+):
+    """
+    Send a prompt to the chatbot and get a response.
+    The prompt and response are stored in conversation history.
+
+    :param session_id: The session ID for the uploaded PDF.
+    :param prompt: The user's question/prompt.
+    :param search_mode: Which search method to use for context retrieval.
+    :param file_cache: The file cache for storing conversation history.
+    :return: A JSON response with the bot's answer and conversation history.
+    """
+
+    if not session_id:
+        raise HTTPException(status_code=400, detail="Session ID is required.")
+
+    if not prompt.strip():
+        raise HTTPException(status_code=400, detail="Prompt cannot be empty.")
+
+    print(f"Received prompt request for session {session_id} with content: {prompt}")
+
+    file_hash = file_cache.get(f"session:{session_id}")
+
+    if not file_hash:
+        raise HTTPException(status_code=404, detail="Session not found.")
+
+    pdf_cache = file_cache.subcache(f"pdf:{file_hash}")
+    length = pdf_cache.get("conversation_length")
+    if length is None:
+        raise HTTPException(status_code=404, detail="Session not found.")
+    length = int(length)
+
+    # Get conversation history and concatenate with prompt
+    conversation_summary = pdf_cache.get(f"conversation_summary:{session_id}")
+    if conversation_summary is None:
+        conversation_summary = ""
+
+    context_messages = []
+    for i in range(MESSAGE_CONTEXT_WINDOW):
+        message = pdf_cache.get(f"messages:{length - i - 1}")
+        if message is not None:
+            context_messages.append(message)
+
+    # Process query (see if we need to do coreference resolution)
+    search_query = prompt
+
+    # Search the document for relevant context
+    results = _search(session_id, search_query, file_cache, mode=search_mode)
+
+    # Generate response using LLM
+    response = generate_response(results, prompt)
+
+    # Save summary of conversation
+    conversation_summary = generate_summary(prompt, response, conversation_summary)
+    pdf_cache.set(f"conversation_summary:{session_id}", conversation_summary)
+
+    # Return response
+    return StreamingResponse(response, media_type="text/event-stream")

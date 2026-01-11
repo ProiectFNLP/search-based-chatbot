@@ -17,7 +17,8 @@ type SearchResults = {
     current: number,
     total: number,
     results: {
-        paragraph: number,
+        paragraph_id: number,
+        paragraph: string,
         page: number,
         score: number,
     }[]
@@ -50,6 +51,8 @@ function App() {
             .filter((result) => {
                 return result.score > 0;
             }).map((result, index) => ({
+                paragraph_id: result.paragraph_id,
+                paragraph: result.paragraph,
                 page: result.page,
                 score: result.score,
                 first: index === 0,
