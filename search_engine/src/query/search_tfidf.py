@@ -1,8 +1,9 @@
+import asyncio
 import pickle
 import time
 from multiprocessing.managers import ListProxy
 from multiprocessing.synchronize import Lock
-from typing import Iterable, Optional, TypedDict, Generator
+from typing import AsyncGenerator, Iterable, Optional, TypedDict, Generator
 from multiprocessing import Pool, Manager
 
 import numpy as np
@@ -12,7 +13,7 @@ from torch.utils.data import DataLoader
 from src.datasets.tfidf_dataset import TfIdfDocumentDataset, TfIdfBatchedOutput, TfIdfChunkedDocumentDataset
 from src.datasets.utils import no_collate
 from src.preprocessing.preprocess import preprocess_document
-
+from src.utils import pool_executor
 
 class SearchResult(TypedDict):
     document: str
@@ -22,12 +23,13 @@ class SearchResult(TypedDict):
 
 def search_tfidf_chunked(args: tuple[str, TfIdfChunkedDocumentDataset, int, ListProxy, Lock]) -> list[SearchResult]:
     query = args[0]
-    dataset = args[1]
+    # dataset = args[1]
+    chunk = args[1]
     idx = args[2]
     global_results = args[3]
     lock = args[4]
 
-    chunk = dataset[idx]
+    # chunk = dataset[idx]
     tfidf = chunk['tfidf']
     vectorizer = chunk['vectorizer']
     documents = chunk['documents']
@@ -65,11 +67,11 @@ def search_tfidf(query: str, dataset: TfIdfChunkedDocumentDataset) -> Generator[
     with Manager() as manager:
         results = manager.list()
         lock = manager.Lock()
-        pickled_dataset = pickle.dumps(dataset)
+        # pickled_dataset = pickle.dumps(dataset)
         if multiprocessing:
             iterable = [
                 (query,
-                 dataset,
+                 dataset[i],
                  i,
                  results,
                  lock) for i in range(len(dataset))
@@ -79,4 +81,4 @@ def search_tfidf(query: str, dataset: TfIdfChunkedDocumentDataset) -> Generator[
                     yield result
         else:
             for i in range(len(dataset)):
-                yield search_tfidf_chunked((query, dataset, i, results, lock))
+                yield search_tfidf_chunked((query, dataset[i], i, results, lock))

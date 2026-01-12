@@ -7,7 +7,7 @@ from scipy.sparse import csr_matrix
 from sklearn.feature_extraction.text import TfidfVectorizer
 
 from src.preprocessing.preprocess import preprocess_document
-from src.utils.cache import FileCache
+from src.utils.redis_cache import FileCache
 
 
 class TfIdfInput(TypedDict):
