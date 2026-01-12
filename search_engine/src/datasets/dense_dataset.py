@@ -9,7 +9,7 @@ from src.preprocessing.preprocess import nlp, preprocess_document
 from sentence_transformers import SentenceTransformer
 
 from src.constants import EMBEDDINGS_DIMENSION
-from src.utils.cache import FileCache
+from src.utils.redis_cache import FileCache
 
 
 class DenseInput(TypedDict):

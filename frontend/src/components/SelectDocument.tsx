@@ -1,30 +1,14 @@
 import {FaPlus} from "react-icons/fa";
-import {useCallback} from "react";
 import {Spinner} from "@heroui/react";
+import type {DragEvent} from "react";
 
 export const SelectDocument = ({handleClick, handleDrop, setDragOver, dragOver, loading} : {
     handleClick: () => void,
-    handleDrop: (e: any) => void,
+    handleDrop: (e: DragEvent) => void,
     setDragOver: (dragOver: boolean) => void,
     dragOver: boolean,
     loading: boolean,
 }) => {
-    const onClick = useCallback(() => {
-        if(loading) return;
-        handleClick();
-    }, [loading, handleClick]);
-
-    const onDrop = useCallback((e: any) => {
-        e.preventDefault();
-        if(loading) return;
-        handleDrop(e);
-    }, [loading, handleDrop]);
-
-    const onDragOver = useCallback((e: any) => {
-        e.preventDefault();
-        if(loading) return;
-        setDragOver(true);
-    }, [loading, setDragOver]);
 
     return (
         <div

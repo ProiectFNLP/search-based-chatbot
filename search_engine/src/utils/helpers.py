@@ -16,7 +16,6 @@ from src.query.search_faiss import search_faiss
 from src.query.search_tfidf import search_tfidf
 from src.utils.cache import FileCache
 
-
 def clear_cache_dir(cache_path: str = "articles"):
     if os.path.exists(cache_path):
         shutil.rmtree(cache_path)  # Delete the directory and all contents

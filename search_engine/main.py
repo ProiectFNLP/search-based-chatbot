@@ -5,6 +5,7 @@ import os
 import pickle
 import time
 import uuid
+import random
 from concurrent.futures import ProcessPoolExecutor
 from contextlib import asynccontextmanager
 from multiprocessing import Pool
@@ -19,7 +20,7 @@ from fastapi.responses import StreamingResponse
 from src.constants import CHUNK_SIZE, MESSAGE_CONTEXT_WINDOW
 from src.datasets.dense_dataset import DenseChunkedDocumentDataset, DenseFileDocumentDataset
 from src.datasets.tfidf_dataset import TfIdfChunkedDocumentDataset, TfIdfFileDocumentDataset
-from src.dependencies import get_file_cache
+from src.dependencies import get_file_cache, init_dependencies
 from src.preprocessing.preprocess import preprocess_document
 from src.preprocessing.string_list_utils import preprocess_string_list
 from src.utils import pool_executor
@@ -29,6 +30,9 @@ from src.utils.helpers import (
     extract_paragraphs_from_page,
     search_in_dataset,
 )
+from src.utils.redis_cache import make_hash, FileCache
+from src.utils.helpers import extract_text_from_pdf, search_in_dataset
+from src.utils.redis import init_redis, close_redis
 
 from src.datasets.tfidf_dataset import TfIdfChunkedDocumentDataset
 from src.datasets.dense_dataset import DenseChunkedDocumentDataset
@@ -37,11 +41,14 @@ from src.datasets.bm25_dataset import Bm25ChunkedDocumentDataset, Bm25FileDocume
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    await init_redis(app)
+    init_dependencies()
     pool_executor.executor = ProcessPoolExecutor()
     loop = asyncio.get_event_loop()
     tasks = [loop.run_in_executor(pool_executor.executor, pool_executor.__init__worker) for _ in range(10)]
     yield
-    pool_executor.executor.shutdown(wait=True)
+    pool_executor.executor.shutdown(wait=True) 
+    await close_redis()
 
 
 app = FastAPI(lifespan=lifespan)
@@ -55,16 +62,65 @@ app.add_middleware(
 )
 
 
-def preprocess_and_cache(args: tuple[FileCache, str]) -> None:
-    file_cache, key = args
+async def preprocess_and_cache(file_cache: FileCache, key: str, pool_executor) -> None:
     if file_cache.exists(f"preprocessed:{key}"):
         return
 
     document = file_cache.get(f"documents:{key}")
     if document is None:
         raise ValueError(f"Document {key} not found in cache.")
-    preprocessed = preprocess_document(document)
+    
+    preprocessed = await asyncio.get_running_loop().run_in_executor(
+        pool_executor.executor,
+        preprocess_document,
+        document
+    )
     file_cache.set(f"preprocessed:{key}", preprocessed)
+
+
+async def prepare_pdf_cache(session_id: str, file_cache: FileCache):
+    """Retrieve and prepare the PDF cache for a given session.
+
+    This function encapsulates the steps to look up the file hash from the
+    session id, obtain the `pdf` subcache, validate the stored length, and
+    ensure any missing pages are preprocessed and cached.
+
+    Returns:
+        tuple(pdf_cache, file_hash, length)
+    Raises:
+        HTTPException(404) if session or length not found
+    """
+
+    file_hash = file_cache.get(f"session:{session_id}")
+    file_hash = file_hash.decode('utf-8') if file_hash else None
+
+    if not file_hash:
+        raise HTTPException(status_code=404, detail="Session not found.")
+
+    pdf_cache = file_cache.subcache(f"pdf:{file_hash}")
+    length = pdf_cache.get("length")
+    if length is None:
+        raise HTTPException(status_code=404, detail="Session not found.")
+    length = int(length)
+
+    existing_preprocessed = set(pdf_cache.subkeys("preprocessed"))
+    print(existing_preprocessed)
+    missing_preprocessed = [str(i) for i in range(length) if str(i) not in existing_preprocessed]
+    print(missing_preprocessed)
+    start = time.time()
+
+    loop = asyncio.get_event_loop()
+
+    await asyncio.gather(*[
+        preprocess_and_cache(pdf_cache, key, pool_executor)
+        for key in missing_preprocessed
+    ])
+
+    end = time.time()
+    print(f"Preprocessing took {end - start:.2f} seconds")
+
+
+    return pdf_cache, file_hash, length
 
 
 @app.post("/upload")
@@ -78,6 +134,8 @@ async def upload(file: UploadFile = File(...), file_cache: FileCache = Depends(g
     contents = await file.read()
     content_pages = list(extract_text_from_pdf(contents))
     pdf_cache = file_cache.subcache(f"pdf:{file_hash}")
+    print(pdf_cache)
+    print(file_cache)
 
     paragraph_index = 0
     for page_num, page in enumerate(content_pages):
@@ -102,28 +160,8 @@ async def _search(session_id: str, search: str, file_cache: FileCache, mode: Lit
         raise HTTPException(status_code=400, detail="Session ID is required.")
 
     print(f"Received search request for session {session_id} with search string: {search}")
-
-    file_hash = file_cache.get(f"session:{session_id}")
-
-    if not file_hash:
-        raise HTTPException(status_code=404, detail="Session not found.")
-
-    pdf_cache = file_cache.subcache(f"pdf:{file_hash}")
-    length = pdf_cache.get("length")
-    if length is None:
-        raise HTTPException(status_code=404, detail="Session not found.")
-    length = int(length)
-
-    existing_preprocessed = set(pdf_cache.subkeys("preprocessed"))
-    print(existing_preprocessed)
-    missing_preprocessed = [str(i) for i in range(length) if str(i) not in existing_preprocessed]
-    print(missing_preprocessed)
-    start = time.time()
-    list(pool_executor.executor.map(preprocess_and_cache, [
-        (pdf_cache, str(i)) for i in missing_preprocessed
-    ], chunksize=50))
-    end = time.time()
-    print(f"Preprocessing took {end - start:.2f} seconds")
+    
+    pdf_cache, file_hash, length = await prepare_pdf_cache(session_id, file_cache)
 
     if mode == 'tfidf':
         base_dataset = TfIdfFileDocumentDataset(pdf_cache, length=length)
@@ -242,6 +280,20 @@ async def send_prompt(
 
     # Generate response using LLM
     response = generate_response(results, prompt)
+@app.get("/send-message")
+async def send_message(session_id: str, message: str, file_cache: FileCache = Depends(get_file_cache)):
+    
+    if not session_id:
+        raise HTTPException(status_code=400, detail="Session ID is required.")
+
+    print(f"Received message for session {session_id}: {message}")
+
+    pdf_cache, file_hash, length = await prepare_pdf_cache(session_id, file_cache)
+
+    results = simulate_chat_response()
+
+    # Modify this
+    return StreamingResponse(results, media_type="text/event-stream")
 
     # Save summary of conversation
     conversation_summary = generate_summary(prompt, response, conversation_summary)
@@ -249,3 +301,19 @@ async def send_prompt(
 
     # Return response
     return StreamingResponse(response, media_type="text/event-stream")
+def simulate_chat_response():
+    responses = [
+        "Sure, I can help with that. ",
+        "Let me check the document for you. ",
+        "Here is the information you requested. ",
+        "Is there anything else you would like to know? ",
+        "Thank you for using our service! "
+    ]
+
+    for response in responses:
+        sleep_time = random.uniform(0.5, 1.5)
+        time.sleep(sleep_time)  # Simulate delay
+        data = {
+            "response": response
+        }
+        yield f"data: {json.dumps(data)}\n\n"
