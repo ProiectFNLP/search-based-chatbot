@@ -17,6 +17,16 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
     import.meta.url,
 ).toString();
 
+type SearchResults = {
+    current: number,
+    total: number,
+    results: {
+        paragraph_id: number,
+        paragraph: string,
+        page: number,
+        score: number,
+    }[]
+}
 
 function App() {
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -27,6 +37,29 @@ function App() {
     const [session_id, setSessionId] = useState<string>();
     const [uploading, setUploading] = useState(false);
 
+    const progress = useMemo(() => {
+        if (!loading) return null;
+        if (!searchResults) return 0;
+        return (searchResults.current + 1) / searchResults.total * 100;
+    }, [loading, searchResults]);
+
+    const filteredSearchResults = useMemo(() => {
+        if (!searchResults) return null;
+        return searchResults.results
+            .slice(0, numResults)
+            .filter((result) => {
+                return result.score > 0;
+            }).map((result, index) => ({
+                paragraph_id: result.paragraph_id,
+                paragraph: result.paragraph,
+                page: result.page,
+                score: result.score,
+                first: index === 0,
+            }));
+
+    }, [searchResults, numResults]);
+
+    const handleClick = () => fileInputRef.current?.click();
     const handleNewDocument = () => fileInputRef.current?.click();
 
     const handleFiles = async (files: FileList | null) => {

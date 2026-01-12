@@ -2,6 +2,8 @@ import os
 
 CHUNK_SIZE = 100
 
+MESSAGE_CONTEXT_WINDOW = 5
+
 FRONTEND_URL = "http://localhost:5173"  # Vite default
 
 
