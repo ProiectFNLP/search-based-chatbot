@@ -1,12 +1,15 @@
 import redis.asyncio as redis
 
-from src.utils.cache import FileCache, BaseFileCache
+from src.utils.redis import get_redis
+from src.utils.redis_cache import BaseRedisCache, FileCache
 
-# redis_client = redis.Redis(host="localhost", port=6379, decode_responses=True)
-file_cache = BaseFileCache("nlp-search-engine")
+file_cache: FileCache | None = None
+
+def init_dependencies():
+    global file_cache
+    redis_client = get_redis()
+    print("Redis client in dependencies:", redis_client)
+    file_cache = BaseRedisCache(redis_client, "nlp-search-engine")
 
 async def get_file_cache() -> FileCache:
     return file_cache
-
-# async def get_redis():
-#     return redis_client

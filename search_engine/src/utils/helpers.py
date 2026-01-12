@@ -15,7 +15,6 @@ from src.query.search_bm25 import search_bm25
 from src.query.search_faiss import search_faiss
 from src.query.search_tfidf import search_tfidf
 
-
 def clear_cache_dir(cache_path: str = "articles"):
     if os.path.exists(cache_path):
         shutil.rmtree(cache_path)  # Delete the directory and all contents

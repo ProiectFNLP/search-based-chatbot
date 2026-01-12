@@ -5,7 +5,7 @@ import torch.utils.data
 from rank_bm25 import BM25Okapi
 
 from src.preprocessing.preprocess import preprocess_document
-from src.utils.cache import FileCache
+from src.utils.redis_cache import FileCache
 
 
 class Bm25Input(TypedDict):
