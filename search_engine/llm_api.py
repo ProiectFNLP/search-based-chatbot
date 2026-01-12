@@ -79,7 +79,3 @@ def send_request(messages: list[dict[str, str]]) -> str:
         messages=messages
     )
     return response.choices[0].message.content
-
-
-response = generate_response(context_information=["France is a country in Europe. It has a population of 67 million people. It is known for its food, culture, and history. The capital of France is Paris."], prompt="What is the capital of France?")
-print(response)
