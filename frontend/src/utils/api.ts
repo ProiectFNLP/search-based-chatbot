@@ -38,9 +38,9 @@ function makeFetch<UrlArgs extends readonly string[], Payload extends BodyInit |
 const searchTfIdfEndpoint = makeEndpoint<["session_id", "search"]>("search-tf-idf");
 const searchFaissEndpoint = makeEndpoint<["session_id", "search"]>("search-faiss");
 const searchBM25Endpoint = makeEndpoint<["session_id", "search"]>("search-bm25");
-
 // type Endpoint = makeFetch<UrlParamKeys, Body : FormData | object, Response: object>
 // await endpoint(payload, url_params);
-const upload = makeFetch<[], FormData, {session_id: string}>("POST", "upload", false);
+const uploadEndpoint = makeFetch<[], FormData, {session_id: string}>("POST", "upload", false);
+const sendMessageEndpoint = makeEndpoint<["session_id", "message"]>("send-message");
 
-export {makeEndpoint, searchTfIdfEndpoint, searchFaissEndpoint, searchBM25Endpoint, upload};
+export {makeEndpoint, searchTfIdfEndpoint, searchFaissEndpoint, searchBM25Endpoint, uploadEndpoint, sendMessageEndpoint};

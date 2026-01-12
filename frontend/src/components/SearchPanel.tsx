@@ -112,7 +112,6 @@ export default function SearchPanel({
          }
      }, [loading, searchResults, setCurrentPage]);
 
-     // Cleanup EventSource on unmount
      useEffect(() => {
          return () => {
              if (eventSourceRef.current) {
@@ -123,7 +122,7 @@ export default function SearchPanel({
      }, []);
 
      return (
-         <div className={"p-4 flex flex-col items-start gap-4 justify-between h-full w-1/4" }>
+         <div className={"p-4 flex flex-col items-start gap-4 justify-between h-full w-1/2" }>
              <div className={"flex flex-col w-full gap-2"}>
                  <p>Search mode</p>
                  <Select
