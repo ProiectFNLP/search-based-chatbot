@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from multiprocessing import Pool
 from typing import Literal, Optional
 
-from external_services.llm_api import generate_response, generate_summary
+from llm_api import generate_response, generate_summary
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -69,6 +69,7 @@ async def preprocess_and_cache(file_cache: FileCache, key: str, pool_executor) -
     document = file_cache.get(f"documents:{key}")
     if document is None:
         raise ValueError(f"Document {key} not found in cache.")
+    document = document.decode('utf-8')
 
     preprocessed = await asyncio.get_running_loop().run_in_executor(
         pool_executor.executor,
@@ -143,6 +144,7 @@ async def upload(file: UploadFile = File(...), file_cache: FileCache = Depends(g
         pdf_cache.set(f"documents:{page_num}", page)
         for j, paragraph in enumerate(paragraphs):
             pdf_cache.set(f"paragraphs:{j}", paragraph)
+        paragraph_index += len(paragraphs)
 
     pdf_cache.set("no_pages", str(len(content_pages)))
     pdf_cache.set("length", str(paragraph_index))
@@ -182,8 +184,6 @@ async def _search(session_id: str, search: str, file_cache: FileCache, mode: Lit
 
     return results
 
-
-
 @app.get("/search-tf-idf")
 async def search_tfidf(session_id: str, search: str, file_cache: FileCache = Depends(get_file_cache)):
     """
@@ -196,7 +196,6 @@ async def search_tfidf(session_id: str, search: str, file_cache: FileCache = Dep
 
     results = await _search(session_id, search, file_cache, mode='tfidf')
     return StreamingResponse(results, media_type="text/event-stream")
-
 
 @app.get("/search-faiss")
 async def search_faiss(session_id: str, search: str, file_cache: FileCache = Depends(get_file_cache)):
@@ -224,11 +223,13 @@ async def search_bm25(session_id: str, search: str, file_cache: FileCache = Depe
     return StreamingResponse(results, media_type="text/event-stream")
 
 
+# TODO: make fake generator from responses
 @app.get("/send-prompt")
 async def send_prompt(
     session_id: str,
     prompt: str,
     search_mode: Literal['tfidf', 'faiss', 'bm25'] = 'faiss',
+    llm_model: Literal['gpt-4o-mini', 'llama'] = 'gpt-4o-mini',
     file_cache: FileCache = Depends(get_file_cache)
 ):
     """
@@ -263,17 +264,24 @@ async def send_prompt(
     search_query = prompt
 
     # Search the document for relevant context
-    results = await _search(session_id, search_query, file_cache, mode=search_mode)
+    print(search_query, search_mode)
+    results = await _search(session_id, search_query, file_cache, mode=search_mode) #intoarce un generator
 
     # Generate response using LLM
     response = generate_response(results, prompt)
+    print("Generated response:", response)
 
     # Save summary of conversation
     conversation_summary = generate_summary(prompt, response, conversation_summary)
     pdf_cache.set(f"conversation_summary:{session_id}", conversation_summary)
 
     # Return response
-    return StreamingResponse(response, media_type="text/event-stream")
+    async def generator():
+        yield f"data: {json.dumps({'response': response})}\n\n"
+        await asyncio.sleep(1)
+        yield f"data: {json.dumps({'done': True})}\n\n"
+
+    return StreamingResponse(generator(), media_type="text/event-stream")
 
 @app.get("/send-message-dummy")
 async def send_message(session_id: str, message: str, file_cache: FileCache = Depends(get_file_cache)):

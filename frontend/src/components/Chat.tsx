@@ -2,10 +2,11 @@ import {useState, useRef, useEffect, type KeyboardEvent} from 'react';
 import {addToast, Button, Input, Select, SelectItem} from '@heroui/react';
 import {FaPaperclip, FaRegTrashAlt} from "react-icons/fa";
 import {assert_error} from "../assertions.ts";
-import {sendMessageDummyEndpoint, sendPromptEndpoint} from "../utils/api.ts";
+import {sendPromptEndpoint} from "../utils/api.ts";
 import {MessageBubble} from "./MessageBubble.tsx";
 import type {Message} from "../types/messageTypes.ts";
 import {type SearchType, SearchTypeValues} from "../types/searchTypes.ts";
+import {type LlmModelType, LlmModelTypeValues} from "../types/llmModelTypes.ts";
 
 type Props = {
     setPdfFile: (f?: File) => void;
@@ -23,6 +24,7 @@ export default function Chat({
     const [loading, setLoading] = useState(false);
     const [messageCounter, setMessageCounter] = useState(0);
     const [searchMode, setSearchMode] = useState<SearchType>("TF-IDF");
+    const [llmModel, setLlmModel] = useState<LlmModelType>("gpt-4o-mini");
     const listRef = useRef<HTMLDivElement | null>(null);
     const eventSourceRef = useRef<EventSource | null>(null);
 
@@ -31,7 +33,13 @@ export default function Chat({
         const trimmedMessage = input.trim();
         if (!trimmedMessage) return;
         let msgId = messageCounter;
-        const msg: Message = {id: String(msgId++), text: trimmedMessage, fromUser: true, streamingChunk: "", isStreaming: false};
+        const msg: Message = {
+            id: String(msgId++),
+            text: trimmedMessage,
+            fromUser: true,
+            streamingChunk: "",
+            isStreaming: false
+        };
         setMessages((m) => [...m, msg]);
         setInput('');
 
@@ -49,31 +57,58 @@ export default function Chat({
             const eventSource: EventSource = new EventSource(sendPromptEndpoint({
                 session_id,
                 prompt: trimmedMessage,
-                search_mode: searchMode.toLowerCase().replace("-", "") ,
+                search_mode: searchMode.toLowerCase().replace("-", ""),
+                llm_model: llmModel,
             }));
-            setMessages((m) => [...m, {id: String(msgId++), text: '', fromUser: false, streamingChunk: "", isStreaming: true}]);
+            // const eventSource: EventSource = new EventSource(sendMessageDummyEndpoint({
+            //     session_id,
+            //     message: trimmedMessage,
+            // }));
+            setMessages((m) => [...m, {
+                id: String(msgId++),
+                text: '',
+                fromUser: false,
+                streamingChunk: "",
+                isStreaming: true
+            }]);
             setMessageCounter(msgId);
             eventSourceRef.current = eventSource;
 
             eventSource.onmessage = (event) => {
                 const data = JSON.parse(event.data);
                 console.log("SSE data:", data);
-                setMessages(prev => {
-                    const last = prev[prev.length - 1];
+                console.log(data?.done)
+                if(data?.done){
+                    try {
+                        eventSource.close();
+                    } catch (e) { /* ignore */
+                    }
+                    if (eventSourceRef.current === eventSource) eventSourceRef.current = null;
+                    setMessages(prev => {
+                        const last = prev[prev.length - 1];
+                        return [
+                            ...prev.slice(0, -1),
+                            {...last, isStreaming: false, streamingChunk: "", text: last.text + last.streamingChunk},
+                        ];
+                    });
+                    setLoading(false);
+                } else {
+                    setMessages(prev => {
+                        const last = prev[prev.length - 1];
 
-                    if (!last || last.fromUser) return prev;
+                        if (!last || last.fromUser) return prev;
 
-                    return [
-                        ...prev.slice(0, -1),
-                        {
-                            ...last,
-                            text: last.text + last.streamingChunk,
-                            isStreaming: true,
-                            streamingChunk: data.response,
-                        }
-                    ];
-                });
-
+                        return [
+                            ...prev.slice(0, -1),
+                            {
+                                ...last,
+                                text: last.text + last.streamingChunk,
+                                isStreaming: true,
+                                streamingChunk: data.response,
+                            }
+                        ];
+                    });
+                }
             };
 
             eventSource.onerror = (err) => {
@@ -83,15 +118,6 @@ export default function Chat({
                 } catch (e) { /* ignore */
                 }
                 if (eventSourceRef.current === eventSource) eventSourceRef.current = null;
-                setMessages(prev => {
-                    const last = prev[prev.length - 1];
-
-                    return [
-                        ...prev.slice(0, -1),
-                        { ...last, isStreaming: false, streamingChunk: "", text: last.text + last.streamingChunk },
-                    ];
-                });
-                setLoading(false);
             };
 
             eventSource.onopen = () => console.log("Connected to SSE");
@@ -112,7 +138,7 @@ export default function Chat({
     const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
         if (e.key === 'Enter') {
             e.preventDefault();
-            handleSendMessage();
+            void handleSendMessage();
         }
     };
 
@@ -128,28 +154,45 @@ export default function Chat({
 
     return (
         <div className="bg-white rounded-xl shadow-lg flex flex-col max-h-s h-full min-h-[420px] ">
-            <h3 className="text-lg font-semibold text-center p-2 flex justify-center">
-                <span>Chat</span>
-                <Select
-                    selectedKeys={new Set([searchMode])}
-                    onSelectionChange={(e) => e.currentKey && setSearchMode(e.currentKey as SearchType)}
-                    aria-label="Search Mode"
-                    labelPlacement={"outside"}
-                    color={"primary"}
-                >
-                    {
-                        SearchTypeValues.map((item) => (
+            <h3 className="relative text-lg font-semibold p-2 min-w-[500px]">
+                <span className="absolute left-1/2 -translate-x-1/2">
+                    Chat
+                </span>
+
+                <div className="flex flex-row gap-2 ml-auto justify-end w-1/3 min-w-[200px]">
+                    <Select
+                        selectedKeys={new Set([searchMode])}
+                        onSelectionChange={(e) => e.currentKey && setSearchMode(e.currentKey as SearchType)}
+                        aria-label="Search Mode"
+                        labelPlacement="outside"
+                        color="primary"
+                        className={"w-xs"}
+                    >
+                        {SearchTypeValues.map((item) => (
                             <SelectItem key={item}>{item}</SelectItem>
-                        ))
-                    }
-                </Select>
+                        ))}
+                    </Select>
+
+                    <Select
+                        selectedKeys={new Set([llmModel])}
+                        onSelectionChange={(e) => e.currentKey && setLlmModel(e.currentKey as LlmModelType)}
+                        aria-label="LLM Model"
+                        labelPlacement="outside"
+                        color="primary"
+                    >
+                        {LlmModelTypeValues.map((item) => (
+                            <SelectItem key={item}>{item}</SelectItem>
+                        ))}
+                    </Select>
+                </div>
             </h3>
+
             <div ref={listRef} className="flex-1 overflow-auto flex flex-col gap-2 p-4 bg-gray-50 border-y-1">
                 {messages.length === 0 && (
                     <div className="text-sm text-gray-500">No messages yet. Ask something about the document.</div>
                 )}
-                {messages.map((m) => (
-                    <MessageBubble key={m.id} message={m}/>
+                {messages.map((m, index) => (
+                    <MessageBubble key={index} message={m}/>
                 ))}
             </div>
 

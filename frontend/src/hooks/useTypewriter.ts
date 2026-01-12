@@ -5,12 +5,14 @@ export function useTypewriter(text: string, speed: number, streaming: boolean) {
     const [buffer, setBuffer] = useState("");
     const [done, setDone] = useState(false);
     useEffect(() => {
+        console.log("sugus", text);
         setBuffer(prev => prev + text);
     }, [text]);
 
     useEffect(() => {
         console.log(displayed.length);
-        if ((!buffer) || displayed.length >= buffer.length) {
+        console.log(buffer);
+        if (displayed.length >= buffer.length) {
             if(!streaming){
                 setDone(true);
             }

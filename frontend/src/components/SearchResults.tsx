@@ -1,4 +1,6 @@
 type SearchResultItem = {
+    paragraph_id: number;
+    paragraph: string;
     page: number;
     score: number;
     first: boolean;

@@ -66,7 +66,7 @@ def generate_summary(prompt: str, answer: str, conversation_summary: str) -> str
 
     messages = [
         {"role": "system", "content": SUMMARY_SYSTEM_PROMPT},
-        {"role": "user", "content": SUMMARY_USER_PROMPT.format(query=prompt, answer=response, conversation_summary=conversation_summary)}
+        {"role": "user", "content": SUMMARY_USER_PROMPT.format(query=prompt, answer=answer, conversation_summary=conversation_summary)}
     ]
 
     response = send_request(messages)
