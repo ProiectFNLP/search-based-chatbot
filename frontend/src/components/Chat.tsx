@@ -1,10 +1,11 @@
 import {useState, useRef, useEffect, type KeyboardEvent} from 'react';
-import {addToast, Button, Input} from '@heroui/react';
+import {addToast, Button, Input, Select, SelectItem} from '@heroui/react';
 import {FaPaperclip, FaRegTrashAlt} from "react-icons/fa";
 import {assert_error} from "../assertions.ts";
-import {sendMessageEndpoint} from "../utils/api.ts";
+import {sendMessageDummyEndpoint, sendPromptEndpoint} from "../utils/api.ts";
 import {MessageBubble} from "./MessageBubble.tsx";
 import type {Message} from "../types/messageTypes.ts";
+import {type SearchType, SearchTypeValues} from "../types/searchTypes.ts";
 
 type Props = {
     setPdfFile: (f?: File) => void;
@@ -21,6 +22,7 @@ export default function Chat({
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
     const [messageCounter, setMessageCounter] = useState(0);
+    const [searchMode, setSearchMode] = useState<SearchType>("TF-IDF");
     const listRef = useRef<HTMLDivElement | null>(null);
     const eventSourceRef = useRef<EventSource | null>(null);
 
@@ -44,9 +46,10 @@ export default function Chat({
         setLoading(true);
 
         try {
-            const eventSource: EventSource = new EventSource(sendMessageEndpoint({
+            const eventSource: EventSource = new EventSource(sendPromptEndpoint({
                 session_id,
-                message: trimmedMessage
+                prompt: trimmedMessage,
+                search_mode: searchMode.toLowerCase().replace("-", "") ,
             }));
             setMessages((m) => [...m, {id: String(msgId++), text: '', fromUser: false, streamingChunk: "", isStreaming: true}]);
             setMessageCounter(msgId);
@@ -125,7 +128,22 @@ export default function Chat({
 
     return (
         <div className="bg-white rounded-xl shadow-lg flex flex-col max-h-s h-full min-h-[420px] ">
-            <h3 className="text-lg font-semibold text-center p-2 flex justify-center"><span>Chat</span></h3>
+            <h3 className="text-lg font-semibold text-center p-2 flex justify-center">
+                <span>Chat</span>
+                <Select
+                    selectedKeys={new Set([searchMode])}
+                    onSelectionChange={(e) => e.currentKey && setSearchMode(e.currentKey as SearchType)}
+                    aria-label="Search Mode"
+                    labelPlacement={"outside"}
+                    color={"primary"}
+                >
+                    {
+                        SearchTypeValues.map((item) => (
+                            <SelectItem key={item}>{item}</SelectItem>
+                        ))
+                    }
+                </Select>
+            </h3>
             <div ref={listRef} className="flex-1 overflow-auto flex flex-col gap-2 p-4 bg-gray-50 border-y-1">
                 {messages.length === 0 && (
                     <div className="text-sm text-gray-500">No messages yet. Ask something about the document.</div>

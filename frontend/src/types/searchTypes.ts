@@ -2,6 +2,8 @@ type SearchResultsType = {
     current: number,
     total: number,
     results: {
+        paragraph_id: number,
+        paragraph: string,
         page: number,
         score: number,
     }[]

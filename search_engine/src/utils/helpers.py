@@ -14,7 +14,7 @@ from src.datasets.tfidf_dataset import TfIdfChunkedDocumentDataset
 from src.query.search_bm25 import search_bm25
 from src.query.search_faiss import search_faiss
 from src.query.search_tfidf import search_tfidf
-from src.utils.cache import FileCache
+from src.utils.redis_cache import FileCache
 
 def clear_cache_dir(cache_path: str = "articles"):
     if os.path.exists(cache_path):

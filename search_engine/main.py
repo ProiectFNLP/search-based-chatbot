@@ -24,14 +24,12 @@ from src.dependencies import get_file_cache, init_dependencies
 from src.preprocessing.preprocess import preprocess_document
 from src.preprocessing.string_list_utils import preprocess_string_list
 from src.utils import pool_executor
-from src.utils.cache import make_hash, FileCache
 from src.utils.helpers import (
     extract_text_from_pdf,
     extract_paragraphs_from_page,
     search_in_dataset,
 )
 from src.utils.redis_cache import make_hash, FileCache
-from src.utils.helpers import extract_text_from_pdf, search_in_dataset
 from src.utils.redis import init_redis, close_redis
 
 from src.datasets.tfidf_dataset import TfIdfChunkedDocumentDataset
@@ -224,7 +222,7 @@ async def search_bm25(session_id: str, search: str, file_cache: FileCache = Depe
     return StreamingResponse(results, media_type="text/event-stream")
 
 
-@app.post("/send_prompt")
+@app.get("/send-prompt")
 async def send_prompt(
     session_id: str,
     prompt: str,
@@ -241,25 +239,12 @@ async def send_prompt(
     :param file_cache: The file cache for storing conversation history.
     :return: A JSON response with the bot's answer and conversation history.
     """
-
     if not session_id:
         raise HTTPException(status_code=400, detail="Session ID is required.")
 
-    if not prompt.strip():
-        raise HTTPException(status_code=400, detail="Prompt cannot be empty.")
+    print(f"Received prompt for session {session_id}: {prompt}")
 
-    print(f"Received prompt request for session {session_id} with content: {prompt}")
-
-    file_hash = file_cache.get(f"session:{session_id}")
-
-    if not file_hash:
-        raise HTTPException(status_code=404, detail="Session not found.")
-
-    pdf_cache = file_cache.subcache(f"pdf:{file_hash}")
-    length = pdf_cache.get("conversation_length")
-    if length is None:
-        raise HTTPException(status_code=404, detail="Session not found.")
-    length = int(length)
+    pdf_cache, file_hash, length = await prepare_pdf_cache(session_id, file_cache)
 
     # Get conversation history and concatenate with prompt
     conversation_summary = pdf_cache.get(f"conversation_summary:{session_id}")
@@ -276,11 +261,19 @@ async def send_prompt(
     search_query = prompt
 
     # Search the document for relevant context
-    results = _search(session_id, search_query, file_cache, mode=search_mode)
+    results = await _search(session_id, search_query, file_cache, mode=search_mode)
 
     # Generate response using LLM
     response = generate_response(results, prompt)
-@app.get("/send-message")
+    
+    # Save summary of conversation
+    conversation_summary = generate_summary(prompt, response, conversation_summary)
+    pdf_cache.set(f"conversation_summary:{session_id}", conversation_summary)
+
+    # Return response
+    return StreamingResponse(response, media_type="text/event-stream")
+
+@app.get("/send-message-dummy")
 async def send_message(session_id: str, message: str, file_cache: FileCache = Depends(get_file_cache)):
     
     if not session_id:
@@ -295,12 +288,8 @@ async def send_message(session_id: str, message: str, file_cache: FileCache = De
     # Modify this
     return StreamingResponse(results, media_type="text/event-stream")
 
-    # Save summary of conversation
-    conversation_summary = generate_summary(prompt, response, conversation_summary)
-    pdf_cache.set(f"conversation_summary:{session_id}", conversation_summary)
 
-    # Return response
-    return StreamingResponse(response, media_type="text/event-stream")
+
 def simulate_chat_response():
     responses = [
         "Sure, I can help with that. ",

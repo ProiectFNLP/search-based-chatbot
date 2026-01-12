@@ -41,6 +41,7 @@ const searchBM25Endpoint = makeEndpoint<["session_id", "search"]>("search-bm25")
 // type Endpoint = makeFetch<UrlParamKeys, Body : FormData | object, Response: object>
 // await endpoint(payload, url_params);
 const uploadEndpoint = makeFetch<[], FormData, {session_id: string}>("POST", "upload", false);
-const sendMessageEndpoint = makeEndpoint<["session_id", "message"]>("send-message");
+const sendMessageDummyEndpoint = makeEndpoint<["session_id", "message"]>("send-message-dummy");
+const sendPromptEndpoint = makeEndpoint<["session_id", "prompt", "search_mode"]>("send-prompt");
 
-export {makeEndpoint, searchTfIdfEndpoint, searchFaissEndpoint, searchBM25Endpoint, uploadEndpoint, sendMessageEndpoint};
+export {makeEndpoint, searchTfIdfEndpoint, searchFaissEndpoint, searchBM25Endpoint, uploadEndpoint, sendMessageDummyEndpoint, sendPromptEndpoint};

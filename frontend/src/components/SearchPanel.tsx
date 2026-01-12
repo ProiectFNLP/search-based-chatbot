@@ -45,6 +45,8 @@ export default function SearchPanel({
              .filter((result) => {
                  return result.score > 0;
              }).map((result, index) => ({
+                 paragraph_id: result.paragraph_id,
+                 paragraph: result.paragraph,
                  page: result.page,
                  score: result.score,
                  first: index === 0,
