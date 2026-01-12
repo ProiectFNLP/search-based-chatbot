@@ -17,6 +17,8 @@ from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
+from settings import settings
+
 from src.constants import CHUNK_SIZE, MESSAGE_CONTEXT_WINDOW
 from src.datasets.dense_dataset import DenseChunkedDocumentDataset, DenseFileDocumentDataset
 from src.datasets.tfidf_dataset import TfIdfChunkedDocumentDataset, TfIdfFileDocumentDataset
@@ -45,7 +47,7 @@ async def lifespan(app: FastAPI):
     loop = asyncio.get_event_loop()
     tasks = [loop.run_in_executor(pool_executor.executor, pool_executor.__init__worker) for _ in range(10)]
     yield
-    pool_executor.executor.shutdown(wait=True) 
+    pool_executor.executor.shutdown(wait=True)
     await close_redis()
 
 
@@ -67,7 +69,7 @@ async def preprocess_and_cache(file_cache: FileCache, key: str, pool_executor) -
     document = file_cache.get(f"documents:{key}")
     if document is None:
         raise ValueError(f"Document {key} not found in cache.")
-    
+
     preprocessed = await asyncio.get_running_loop().run_in_executor(
         pool_executor.executor,
         preprocess_document,
@@ -158,7 +160,7 @@ async def _search(session_id: str, search: str, file_cache: FileCache, mode: Lit
         raise HTTPException(status_code=400, detail="Session ID is required.")
 
     print(f"Received search request for session {session_id} with search string: {search}")
-    
+
     pdf_cache, file_hash, length = await prepare_pdf_cache(session_id, file_cache)
 
     if mode == 'tfidf':
@@ -265,7 +267,7 @@ async def send_prompt(
 
     # Generate response using LLM
     response = generate_response(results, prompt)
-    
+
     # Save summary of conversation
     conversation_summary = generate_summary(prompt, response, conversation_summary)
     pdf_cache.set(f"conversation_summary:{session_id}", conversation_summary)
@@ -275,7 +277,7 @@ async def send_prompt(
 
 @app.get("/send-message-dummy")
 async def send_message(session_id: str, message: str, file_cache: FileCache = Depends(get_file_cache)):
-    
+
     if not session_id:
         raise HTTPException(status_code=400, detail="Session ID is required.")
 

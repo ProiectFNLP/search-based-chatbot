@@ -1,4 +1,5 @@
 # PyCharm directories
+.env
 .idea/
 .cadence/
 **/.cache/
