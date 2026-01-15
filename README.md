@@ -5,7 +5,7 @@
    `python3.10 -m venv .venv`
 - Activate it
 - Install requirements from backend:
-  `pip install -r search-engine/requirements.txt`
+  `pip install -r search_engine/requirements.txt`
 
 
 # How to run:
