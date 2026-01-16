@@ -6,9 +6,18 @@
 - Activate it
 - Install requirements from backend:
   `pip install -r search_engine/requirements.txt`
-- Install redis [for linux]:
+- Install redis server:
+  * For Linux:
+  
   `sudo apt update`
+  
   `sudo apt install redis-server -y`
+
+  * For BREW:
+
+  `brew install redis`
+
+  `brew services start redis`
 
 # How to run:
 
