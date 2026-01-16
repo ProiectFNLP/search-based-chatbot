@@ -1,8 +1,8 @@
 from openai import OpenAI
 import json
-
+from ollama import chat
 from settings import settings
-
+import requests
 from typing import Generator
 
 GENERATION_SYSTEM_PROMPT = """
@@ -47,21 +47,46 @@ SUMMARY_USER_PROMPT = """
     Return only the updated summary.
     """
 
+def get_openai_client():
+    if settings.openai_api_key is None:
+        raise RuntimeError("OpenAI API key not configured")
 
-client = OpenAI(api_key=settings.openai_api_key.get_secret_value())
+    return OpenAI(
+        api_key=settings.openai_api_key.get_secret_value()
+    )
+
+#client = OpenAI(api_key=settings.openai_api_key.get_secret_value())
 
 
 
-def generate_response(context_information:  Generator[str, None, None], prompt: str) -> str:
+# def generate_response(context_information:  Generator[str, None, None], prompt: str) -> str:
 
-    messages = [
-        {"role": "system", "content": GENERATION_SYSTEM_PROMPT},
-        {"role": "user", "content": GENERATION_USER_PROMPT.format(context_information=context_information, query=prompt)}
-    ]
+#     messages = [
+#         {"role": "system", "content": GENERATION_SYSTEM_PROMPT},
+#         {"role": "user", "content": GENERATION_USER_PROMPT.format(context_information=context_information, query=prompt)}
+#     ]
 
-    response = send_request(messages)
+#     response = send_request(messages)
+#     return response
+
+LLAMA_MODEL = "llama3.2"
+LLAMA_URL = "http://localhost:11434/api/generate"
+
+from ollama import generate
+
+def generate_response(context_results, prompt):
+    # Concatenează contextul din document
+    context_text = "\n".join(context_results)
+
+    # Construiește textul complet trimis la LLaMA
+    full_prompt = f"Context trimis la LLaMA:\n{context_text}\n\nIntrebare: {prompt}\nRaspuns:"
+    print(full_prompt)
+    # Generează răspuns folosind modelul local LLaMA
+    result = generate(LLAMA_MODEL, full_prompt)
+
+    # Returnează doar textul generat
+    response = result.response
     return response
-
 
 def generate_summary(prompt: str, answer: str, conversation_summary: str) -> str:
 
@@ -75,11 +100,16 @@ def generate_summary(prompt: str, answer: str, conversation_summary: str) -> str
 
 
 def send_request(messages: list[dict[str, str]]) -> str:
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
+    # response = client.chat.completions.create(
+    #     model="gpt-4o-mini",
+    #     messages=messages
+    # )
+    response = chat(
+        model="llama3.2",
         messages=messages
     )
-    return response.choices[0].message.content
+    return response["message"]["content"]
+    #return response.choices[0].message.content
 
 
 # Global variables for model caching in worker processes
@@ -184,3 +214,24 @@ Include in your answer the specific context snippets you are basing your respons
     response = _generate_with_flan_t5(model_path, full_prompt)
     print("response from flan-t5-base: ", response)
     return response
+
+def call_llama(prompt: str) -> str:
+    """
+    Trimite promptul la modelul LLaMA local prin Ollama API
+    si întoarce raspunsul ca string.
+    """
+    try:
+        response = requests.post(
+            "http://localhost:11434/api/generate",
+            json={
+                "model": "llama3.2",  # numele modelului tău din ollama list
+                "prompt": prompt,
+                "stream": False
+            },
+            timeout=60
+        )
+        response.raise_for_status()
+        data = response.json()
+        return data.get("response", "")
+    except requests.exceptions.RequestException as e:
+        return f"Error calling LLaMA: {e}"
