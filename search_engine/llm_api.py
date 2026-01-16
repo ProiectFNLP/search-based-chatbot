@@ -1,9 +1,20 @@
 from openai import OpenAI
 import json
-from ollama import chat
 from settings import settings
 import requests
 from typing import Generator
+
+# Optional ollama import - only needed for llama model
+try:
+    from ollama import chat, generate
+    OLLAMA_AVAILABLE = True
+    print("✓ Ollama package is available")
+except ImportError:
+    chat = None
+    generate = None
+    OLLAMA_AVAILABLE = False
+    print("⚠ WARNING: Ollama package is not installed. Llama model will not be available.")
+    print("  Install it with: pip install ollama")
 
 GENERATION_SYSTEM_PROMPT = """
     You are a retrieval-augmented generation (RAG) assistant.
@@ -72,21 +83,32 @@ def get_openai_client():
 LLAMA_MODEL = "llama3.2"
 LLAMA_URL = "http://localhost:11434/api/generate"
 
-from ollama import generate
-
 def generate_response(context_results, prompt):
+    if not OLLAMA_AVAILABLE or generate is None:
+        print("❌ ERROR: Ollama is not available. Cannot generate response with Llama model.")
+        print("  Please install ollama: pip install ollama")
+        print("  And ensure Ollama service is running: ollama serve")
+        return "Error: Ollama is not available. Please install ollama package and start the Ollama service."
+    
     # Concatenează contextul din document
-    context_text = "\n".join(context_results)
+    # Convert generator to list, then send only the first 3 paragraphs to the LLM
+    context_list = list(context_results)
+    context_text = "\n".join(context_list[:3])
 
     # Construiește textul complet trimis la LLaMA
     full_prompt = f"Context trimis la LLaMA:\n{context_text}\n\nIntrebare: {prompt}\nRaspuns:"
     print(full_prompt)
     # Generează răspuns folosind modelul local LLaMA
-    result = generate(LLAMA_MODEL, full_prompt)
-
-    # Returnează doar textul generat
-    response = result.response
-    return response
+    try:
+        result = generate(LLAMA_MODEL, full_prompt)
+        # Returnează doar textul generat
+        response = result.response
+        return response
+    except Exception as e:
+        print(f"❌ ERROR: Failed to generate response with Ollama: {e}")
+        print("  Make sure Ollama service is running: ollama serve")
+        print("  And the model is available: ollama pull llama3.2")
+        return f"Error generating response: {str(e)}"
 
 def generate_summary(prompt: str, answer: str, conversation_summary: str) -> str:
 
@@ -100,15 +122,27 @@ def generate_summary(prompt: str, answer: str, conversation_summary: str) -> str
 
 
 def send_request(messages: list[dict[str, str]]) -> str:
+    if not OLLAMA_AVAILABLE or chat is None:
+        print("❌ ERROR: Ollama is not available. Cannot send request with Llama model.")
+        print("  Please install ollama: pip install ollama")
+        print("  And ensure Ollama service is running: ollama serve")
+        return "Error: Ollama is not available. Please install ollama package and start the Ollama service."
+    
     # response = client.chat.completions.create(
     #     model="gpt-4o-mini",
     #     messages=messages
     # )
-    response = chat(
-        model="llama3.2",
-        messages=messages
-    )
-    return response["message"]["content"]
+    try:
+        response = chat(
+            model="llama3.2",
+            messages=messages
+        )
+        return response["message"]["content"]
+    except Exception as e:
+        print(f"❌ ERROR: Failed to send request to Ollama: {e}")
+        print("  Make sure Ollama service is running: ollama serve")
+        print("  And the model is available: ollama pull llama3.2")
+        return f"Error sending request: {str(e)}"
     #return response.choices[0].message.content
 
 
@@ -214,24 +248,3 @@ Include in your answer the specific context snippets you are basing your respons
     response = _generate_with_flan_t5(model_path, full_prompt)
     print("response from flan-t5-base: ", response)
     return response
-
-def call_llama(prompt: str) -> str:
-    """
-    Trimite promptul la modelul LLaMA local prin Ollama API
-    si întoarce raspunsul ca string.
-    """
-    try:
-        response = requests.post(
-            "http://localhost:11434/api/generate",
-            json={
-                "model": "llama3.2",  # numele modelului tău din ollama list
-                "prompt": prompt,
-                "stream": False
-            },
-            timeout=60
-        )
-        response.raise_for_status()
-        data = response.json()
-        return data.get("response", "")
-    except requests.exceptions.RequestException as e:
-        return f"Error calling LLaMA: {e}"
