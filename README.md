@@ -19,6 +19,10 @@
 
   `brew services start redis`
 
+- Download Ollama from here: `https://ollama.com/download`
+
+  Run Ollama: `ollama run llama3.2`
+
 # How to run:
 
 ## Frontend
