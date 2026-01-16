@@ -229,7 +229,7 @@ async def send_prompt(
     session_id: str,
     prompt: str,
     search_mode: Literal['tfidf', 'faiss', 'bm25'] = 'faiss',
-    llm_model: Literal['gpt-4o-mini', 'llama'] = 'gpt-4o-mini',
+    llm_model: Literal['llama', 'gpt-4o-mini'] = 'llama',
     file_cache: FileCache = Depends(get_file_cache)
 ):
     """

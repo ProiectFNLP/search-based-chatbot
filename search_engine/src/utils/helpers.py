@@ -65,15 +65,29 @@ def search_in_dataset(
 
     length = len(dataset)
 
-    for paragraph, results in enumerate(generator):
+    # for paragraph, results in enumerate(generator):
+    #     data = {
+    #         "results": [{
+    #             "paragraph_id": int(result["id"]) + 1,
+    #             "paragraph": file_cache.get(f"paragraphs:{paragraph}"),
+    #             "page": int(file_cache.get(f"paragraph_page_number:{paragraph}")) + 1,
+    #             "score": float(result["score"])
+    #         } for result in results],
+    #         "current": paragraph,
+    #         "total": length
+    #     }
+    #     yield f"data: {json.dumps(data)}\n\n"
+    for _, results in enumerate(generator):
         data = {
-            "results": [{
-                "paragraph_id": int(result["id"]) + 1,
-                "paragraph": file_cache.get(f"paragraphs:{paragraph}"),
-                "page": int(file_cache.get(f"paragraph_page_number:{paragraph}")) + 1,
-                "score": float(result["score"])
-            } for result in results],
-            "current": paragraph,
-            "total": length
+        "results": [{
+            "paragraph_id": int(result["id"]) + 1,
+            "paragraph": file_cache.get(f"paragraphs:{result['id']}"),
+            "page": int(file_cache.get(f"paragraph_page_number:{result['id']}") or -1) + 1,
+            "score": float(result["score"])
+        } for result in results],
+        "current": _,
+        "total": length
         }
         yield f"data: {json.dumps(data)}\n\n"
+
+
