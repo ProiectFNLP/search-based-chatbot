@@ -48,6 +48,22 @@ def extract_paragraphs_from_page(text: str) -> Generator[str, None, None]:
             yield paragraph
 
 
+def _get_cache_value(cache: Optional[FileCache], key: str) -> Optional[str]:
+    """Helper function to get and decode cache values."""
+    if not cache:
+        print(f"Cache not found for key: {key}")
+        return None
+    value = cache.get(key)
+    if value is None:
+        print(f"Cache value not found for key: {key}")
+        return None
+    if isinstance(value, bytes):
+        # print(f"Decoding cache value for key: {key}")
+        return value.decode('utf-8')
+    # print(f"Cache value found for key: {key}")
+    return value
+
+
 def search_in_dataset(
     dataset: TfIdfChunkedDocumentDataset | DenseChunkedDocumentDataset | Bm25ChunkedDocumentDataset,
     search: str,
@@ -69,8 +85,8 @@ def search_in_dataset(
         data = {
             "results": [{
                 "paragraph_id": int(result["id"]) + 1,
-                "paragraph": file_cache.get(f"paragraphs:{paragraph}"),
-                "page": int(file_cache.get(f"paragraph_page_number:{paragraph}")) + 1,
+                "paragraph": _get_cache_value(file_cache, f"paragraphs:{result['id']}"),
+                "page": int(_get_cache_value(file_cache, f"paragraph_page_number:{result['id']}") or "0") + 1 if file_cache else 1,
                 "score": float(result["score"])
             } for result in results],
             "current": paragraph,

@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from multiprocessing import Pool
 from typing import Literal, Optional
 
-from llm_api import generate_response, generate_summary
+from llm_api import generate_response, generate_summary, generate_response_local
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -141,10 +141,16 @@ async def upload(file: UploadFile = File(...), file_cache: FileCache = Depends(g
     paragraph_index = 0
     for page_num, page in enumerate(content_pages):
         paragraphs = list(extract_paragraphs_from_page(page))
-        pdf_cache.set(f"documents:{page_num}", page)
+        # Store full page text (for reference)
+        pdf_cache.set(f"pages:{page_num}", page)
         for j, paragraph in enumerate(paragraphs):
-            pdf_cache.set(f"paragraphs:{j}", paragraph)
-        paragraph_index += len(paragraphs)
+            # Store paragraph as a document with global index (dataset expects documents:{idx})
+            pdf_cache.set(f"documents:{paragraph_index}", paragraph)
+            # Store paragraph text separately for easy lookup
+            pdf_cache.set(f"paragraphs:{paragraph_index}", paragraph)
+            # Store page number for this paragraph
+            pdf_cache.set(f"paragraph_page_number:{paragraph_index}", str(page_num))
+            paragraph_index += 1
 
     pdf_cache.set("no_pages", str(len(content_pages)))
     pdf_cache.set("length", str(paragraph_index))
@@ -180,7 +186,41 @@ async def _search(session_id: str, search: str, file_cache: FileCache, mode: Lit
     else:
         raise HTTPException(status_code=400, detail="Invalid mode. Use 'tfidf' or 'faiss'.")
 
-    results = search_in_dataset(dataset, search, file_cache)
+    # Print dataset information
+    print("=" * 80)
+    print("DATASET INFORMATION:")
+    print(f"  Dataset type: {type(dataset).__name__}")
+    print(f"  Dataset length (chunks): {len(dataset)}")
+    if hasattr(dataset, 'chunk_size'):
+        print(f"  Chunk size: {dataset.chunk_size}")
+    if hasattr(dataset, 'dataset'):
+        if hasattr(dataset.dataset, 'length'):
+            print(f"  Base dataset length (documents): {dataset.dataset.length}")
+        if hasattr(dataset.dataset, 'document_cache'):
+            print(f"  Document cache type: {type(dataset.dataset.document_cache).__name__}")
+    
+    # Print sample documents from the dataset (first 2 chunks, first document in each)
+    print("\nSample documents from dataset:")
+    try:
+        for i in range(min(2, len(dataset))):
+            chunk = dataset[i]
+            if 'documents' in chunk and len(chunk['documents']) > 0:
+                sample_doc = chunk['documents'][0]
+                # Truncate long documents
+                doc_preview = sample_doc[:150] + "..." if len(sample_doc) > 150 else sample_doc
+                print(f"  Chunk {i}, Document 0 ({len(sample_doc)} chars): {doc_preview}")
+                print(f"    Total documents in chunk: {len(chunk['documents'])}")
+            elif 'document' in chunk:
+                doc_preview = chunk['document'][:150] + "..." if len(chunk['document']) > 150 else chunk['document']
+                print(f"  Chunk {i} ({len(chunk['document'])} chars): {doc_preview}")
+    except Exception as e:
+        print(f"  Could not read sample documents: {e}")
+    
+    print("\nSEARCH PARAMETERS:")
+    print(f"  Search query: '{search}'")
+    print(f"  Search mode: {mode}")
+    print("=" * 80)
+    results = search_in_dataset(dataset, search, pdf_cache)
 
     return results
 
@@ -229,7 +269,7 @@ async def send_prompt(
     session_id: str,
     prompt: str,
     search_mode: Literal['tfidf', 'faiss', 'bm25'] = 'faiss',
-    llm_model: Literal['gpt-4o-mini', 'llama'] = 'gpt-4o-mini',
+    llm_model: Literal['gpt-4o-mini', 'llama', 'flan-t5-base'] = 'gpt-4o-mini',
     file_cache: FileCache = Depends(get_file_cache)
 ):
     """
@@ -268,12 +308,28 @@ async def send_prompt(
     results = await _search(session_id, search_query, file_cache, mode=search_mode) #intoarce un generator
 
     # Generate response using LLM
-    response = generate_response(results, prompt)
+    if llm_model == 'flan-t5-base':
+        # Collect all results from generator before passing to worker process
+        # (generators can't be pickled for process pool)
+        print("Using local model")
+        print(results)
+        results_list = list(results)
+        print(results_list)
+        # Run local model in process pool to avoid blocking
+        loop = asyncio.get_running_loop()
+        response = await loop.run_in_executor(
+            pool_executor.executor,
+            generate_response_local,
+            iter(results_list),  # Convert back to generator for the function
+            prompt
+        )
+    else:
+        response = generate_response(results, prompt)
     print("Generated response:", response)
 
-    # Save summary of conversation
-    conversation_summary = generate_summary(prompt, response, conversation_summary)
-    pdf_cache.set(f"conversation_summary:{session_id}", conversation_summary)
+    # Save summary of conversation (not supported for local model)
+    # conversation_summary = generate_summary(prompt, response, conversation_summary)
+    # pdf_cache.set(f"conversation_summary:{session_id}", conversation_summary)
 
     # Return response
     async def generator():

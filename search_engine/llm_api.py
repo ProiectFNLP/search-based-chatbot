@@ -1,4 +1,5 @@
 from openai import OpenAI
+import json
 
 from settings import settings
 
@@ -79,3 +80,107 @@ def send_request(messages: list[dict[str, str]]) -> str:
         messages=messages
     )
     return response.choices[0].message.content
+
+
+# Global variables for model caching in worker processes
+_model_cache = {}
+_tokenizer_cache = {}
+
+
+def _load_model_worker(model_path: str):
+    """
+    Load the Flan-T5 model in a worker process.
+    This function is called in the worker process to cache the model.
+    """
+    from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+    
+    if model_path not in _model_cache:
+        print(f"Loading Flan-T5 model from: {model_path}")
+        _tokenizer_cache[model_path] = AutoTokenizer.from_pretrained(model_path)
+        _model_cache[model_path] = AutoModelForSeq2SeqLM.from_pretrained(model_path)
+        print(f"Model loaded successfully")
+    
+    return _model_cache[model_path], _tokenizer_cache[model_path]
+
+
+def _generate_with_flan_t5(model_path: str, prompt_text: str) -> str:
+    """
+    Generate response using Flan-T5 model.
+    This function runs in a worker process.
+    """
+    model, tokenizer = _load_model_worker(model_path)
+    
+    # Tokenize input
+    inputs = tokenizer(prompt_text, return_tensors="pt", max_length=512, truncation=True)
+    
+    # Generate
+    outputs = model.generate(
+        inputs["input_ids"],
+        max_length=512,
+        num_beams=4,
+        early_stopping=True,
+        do_sample=False
+    )
+    
+    # Decode output
+    response = tokenizer.decode(outputs[0], skip_special_tokens=True)
+    print("resposne from flan-t5-base: ", response)
+    return response
+
+
+def _extract_context_from_generator(context_information: Generator[str, None, None]) -> str:
+    """
+    Extract and format context from the search results generator.
+    The generator yields JSON-formatted strings like: "data: {...}\n\n"
+    """
+    context_parts = []
+    
+    for item in context_information:
+        # Parse the JSON string (format: "data: {...}\n\n")
+        if item.startswith("data: "):
+            json_str = item[6:].strip()  # Remove "data: " prefix
+            try:
+                data = json.loads(json_str)
+                if "results" in data:
+                    for result in data["results"]:
+                        if "paragraph" in result and result["paragraph"]:
+                            paragraph = result["paragraph"]
+                            if isinstance(paragraph, bytes):
+                                paragraph = paragraph.decode('utf-8')
+                            context_parts.append(paragraph)
+            except json.JSONDecodeError:
+                continue
+    
+    # Combine all paragraphs into a single context string
+    context_text = "\n\n".join(context_parts)
+    return context_text
+
+
+def generate_response_local(context_information: Generator[str, None, None], prompt: str) -> str:
+    """
+    Generate response using local Flan-T5 model.
+    This function should be called from an async context using run_in_executor.
+    """
+    # Determine model path
+    model_path = settings.flan_t5_model_path or "google/flan-t5-base"
+    
+    # Extract context from generator
+    context_text = _extract_context_from_generator(context_information)
+    
+    # Format prompt for Flan-T5 (text-to-text model, not chat-based)
+    # Combine system and user prompts into a single text input
+    full_prompt = f"""{GENERATION_SYSTEM_PROMPT.strip()}
+
+User query: {prompt}
+
+Retrieved context:
+{context_text}
+
+Using only the retrieved context, produce the best possible answer to the user query.
+Include in your answer the specific context snippets you are basing your response on, quoted in double quotes ""."""
+    
+    # Run model inference (this will be called in a worker process)
+    print("full_prompt: ", full_prompt)
+    response = _generate_with_flan_t5(model_path, full_prompt)
+    print("response from flan-t5-base: ", response)
+    return response
