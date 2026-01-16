@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Temporary RDB files
+tmp-*.rdb
+temp-*.rdb
