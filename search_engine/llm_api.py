@@ -3,6 +3,7 @@ import json
 from settings import settings
 import requests
 from typing import Generator
+from src.constants import TOP_K
 
 # Optional ollama import - only needed for llama model
 try:
@@ -222,6 +223,8 @@ def _extract_context_from_generator(context_information: Generator[str, None, No
                             context_parts.append(paragraph)
             except json.JSONDecodeError:
                 continue
+
+    context_parts = context_parts[:TOP_K]
 
     # Combine all paragraphs into a single context string
     context_text = "\n\n".join(context_parts)
