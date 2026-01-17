@@ -1,4 +1,4 @@
-const LlmModelTypeValues = ["gpt-4o-mini" , "llama", "flan-t5-base"] as const;
+const LlmModelTypeValues = ["gpt-5-nano" , "llama", "flan-t5-base"] as const;
 type LlmModelType = typeof LlmModelTypeValues[number];
 
 export {LlmModelTypeValues};

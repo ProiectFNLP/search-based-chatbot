@@ -70,49 +70,47 @@ def get_openai_client():
         api_key=settings.openai_api_key.get_secret_value()
     )
 
-#client = OpenAI(api_key=settings.openai_api_key.get_secret_value())
-
-
-
-# def generate_response(context_information:  Generator[str, None, None], prompt: str) -> str:
-
-#     messages = [
-#         {"role": "system", "content": GENERATION_SYSTEM_PROMPT},
-#         {"role": "user", "content": GENERATION_USER_PROMPT.format(context_information=context_information, query=prompt)}
-#     ]
-
-#     response = send_request(messages)
-#     return response
-
 LLAMA_MODEL = "llama3.2"
 LLAMA_URL = "http://localhost:11434/api/generate"
 
-def generate_response(context_results, prompt):
-    if not OLLAMA_AVAILABLE or generate is None:
-        print("❌ ERROR: Ollama is not available. Cannot generate response with Llama model.")
-        print("  Please install ollama: pip install ollama")
-        print("  And ensure Ollama service is running: ollama serve")
-        return "Error: Ollama is not available. Please install ollama package and start the Ollama service."
-    
-    # Concatenează contextul din document
-    # Convert generator to list, then send only the first 3 paragraphs to the LLM
+def generate_response(context_results, prompt, model):
+    # Extract context for all models
     context_list = list(context_results)
     context_text = "\n".join(context_list[:3])
 
-    # Construiește textul complet trimis la LLaMA
-    full_prompt = f"Context trimis la LLaMA:\n{context_text}\n\nIntrebare: {prompt}\nRaspuns:"
-    print(full_prompt)
-    # Generează răspuns folosind modelul local LLaMA
-    try:
-        result = generate(LLAMA_MODEL, full_prompt)
-        # Returnează doar textul generat
-        response = result.response
-        return response
-    except Exception as e:
-        print(f"❌ ERROR: Failed to generate response with Ollama: {e}")
-        print("  Make sure Ollama service is running: ollama serve")
-        print("  And the model is available: ollama pull llama3.2")
-        return f"Error generating response: {str(e)}"
+    if model == 'llama':
+        if not OLLAMA_AVAILABLE or generate is None:
+            print("❌ ERROR: Ollama is not available. Cannot generate response with Llama model.")
+            print("  Please install ollama: pip install ollama")
+            print("  And ensure Ollama service is running: ollama serve")
+            return "Error: Ollama is not available. Please install ollama package and start the Ollama service."
+
+        # Construiește textul complet trimis la LLaMA
+        full_prompt = GENERATION_USER_PROMPT.format(query=prompt, context_information=context_text)
+        print(full_prompt)
+        # Generează răspuns folosind modelul local LLaMA
+        try:
+            result = generate(LLAMA_MODEL, full_prompt)
+            # Returnează doar textul generat
+            response = result.response
+            return response
+        except Exception as e:
+            print(f"❌ ERROR: Failed to generate response with Ollama: {e}")
+            print("  Make sure Ollama service is running: ollama serve")
+            print("  And the model is available: ollama pull llama3.2")
+            return f"Error generating response: {str(e)}"
+    elif model == 'gpt-5-nano':
+        messages = [
+            {"role": "system", "content": GENERATION_SYSTEM_PROMPT},
+            {"role": "user", "content": GENERATION_USER_PROMPT.format(context_information=context_text, query=prompt)}
+        ]
+        return send_request(messages, model)
+    elif model == 'flan-t5-base':
+        # Use local Flan-T5
+        return generate_response_local(context_results, prompt)
+    else:
+        return f"Unsupported model: {model}"
+
 
 def generate_summary(prompt: str, answer: str, conversation_summary: str) -> str:
 
@@ -124,30 +122,36 @@ def generate_summary(prompt: str, answer: str, conversation_summary: str) -> str
     response = send_request(messages)
     return response
 
+def send_request(messages: list[dict[str, str]], model='llama') -> str:
+    if model == 'llama':
+        if not OLLAMA_AVAILABLE or chat is None:
+            print("❌ ERROR: Ollama is not available. Cannot send request with Llama model.")
+            print("  Please install ollama: pip install ollama")
+            print("  And ensure Ollama service is running: ollama serve")
+            return "Error: Ollama is not available. Please install ollama package and start the Ollama service."
 
-def send_request(messages: list[dict[str, str]]) -> str:
-    if not OLLAMA_AVAILABLE or chat is None:
-        print("❌ ERROR: Ollama is not available. Cannot send request with Llama model.")
-        print("  Please install ollama: pip install ollama")
-        print("  And ensure Ollama service is running: ollama serve")
-        return "Error: Ollama is not available. Please install ollama package and start the Ollama service."
-
-    # response = client.chat.completions.create(
-    #     model="gpt-4o-mini",
-    #     messages=messages
-    # )
-    try:
-        response = chat(
-            model="llama3.2",
-            messages=messages
-        )
-        return response["message"]["content"]
-    except Exception as e:
-        print(f"❌ ERROR: Failed to send request to Ollama: {e}")
-        print("  Make sure Ollama service is running: ollama serve")
-        print("  And the model is available: ollama pull llama3.2")
-        return f"Error sending request: {str(e)}"
-    #return response.choices[0].message.content
+        try:
+            response = chat(
+                model="llama3.2",
+                messages=messages
+            )
+            return response["message"]["content"]
+        except Exception as e:
+            print(f"❌ ERROR: Failed to send request to Ollama: {e}")
+            print("  Make sure Ollama service is running: ollama serve")
+            print("  And the model is available: ollama pull llama3.2")
+            return f"Error sending request: {str(e)}"
+    elif model == 'gpt-5-nano':
+        client = get_openai_client()
+        try:
+            response = client.chat.completions.create(
+                model="gpt-5-nano",
+                messages=messages
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            print(f"❌ ERROR: Failed to send request to OpenAI: {e}")
+            return f"Error sending request: {str(e)}"
 
 
 # Global variables for model caching in worker processes
