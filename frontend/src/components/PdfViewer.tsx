@@ -22,12 +22,16 @@ export function PdfViewer({
             <Document
                 file={file}
                 onLoadSuccess={({ numPages }) => setNumPages(numPages)}
+                className={"shrink grow min-h-0"}
             >
                 <Page
                     pageNumber={currentPage}
                     renderAnnotationLayer={false}
                     renderTextLayer={false}
-                />
+                    scale={0.92}
+                    // className={'flex flex-col items-center'}
+                >
+                </Page>
             </Document>
 
             <Divider />

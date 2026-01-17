@@ -91,7 +91,7 @@ function App() {
                 />
 
                 {pdfFile && session_id && (
-                    <div className={"flex flex-row gap-10 h-min max-h-full w-11/12 justify-center p-10"}>
+                    <div className={"flex flex-row gap-10 h-min max-h-full w-11/12 justify-center"}>
                         <PdfViewer
                             key={pdfFile.name + pdfFile.size}
                             file={pdfFile}
