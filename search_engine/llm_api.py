@@ -109,6 +109,9 @@ def generate_response(context_results, prompt, model):
     elif model == 'flan-t5-base':
         # Use local Flan-T5
         return generate_response_local(context_results, prompt)
+    elif model == 'qwen2-1.5b':
+        # Use local Qwen2-1.5B-Instruct
+        return generate_response_local_qwen(context_results, prompt)
     else:
         return f"Unsupported model: {model}"
 
@@ -158,6 +161,10 @@ def send_request(messages: list[dict[str, str]], model='llama') -> str:
 # Global variables for model caching in worker processes
 _model_cache = {}
 _tokenizer_cache = {}
+
+# Global variables for Qwen2 model caching in worker processes
+_model_cache_qwen = {}
+_tokenizer_cache_qwen = {}
 
 
 def _load_model_worker(model_path: str):
@@ -251,4 +258,85 @@ def generate_response_local(context_information: Generator[str, None, None], pro
     # Run model inference (this will be called in a worker process)
     print("full_prompt: ", full_prompt)
     response = _generate_with_flan_t5(model_path, full_prompt)
+    return response
+
+
+def _load_model_worker_qwen(model_path: str):
+    """
+    Load the Qwen2-1.5B-Instruct model in a worker process.
+    This function is called in the worker process to cache the model.
+    """
+    from transformers import AutoTokenizer, AutoModelForCausalLM
+
+    if model_path not in _model_cache_qwen:
+        print(f"Loading Qwen2 model from: {model_path}")
+        _tokenizer_cache_qwen[model_path] = AutoTokenizer.from_pretrained(model_path)
+        _model_cache_qwen[model_path] = AutoModelForCausalLM.from_pretrained(model_path)
+        # Set pad_token if not present
+        if _tokenizer_cache_qwen[model_path].pad_token is None:
+            _tokenizer_cache_qwen[model_path].pad_token = _tokenizer_cache_qwen[model_path].eos_token
+        print(f"Qwen2 model loaded successfully")
+
+    return _model_cache_qwen[model_path], _tokenizer_cache_qwen[model_path]
+
+
+def _generate_with_qwen(model_path: str, messages: list[dict[str, str]]) -> str:
+    """
+    Generate response using Qwen2-1.5B-Instruct model.
+    This function runs in a worker process.
+    """
+    model, tokenizer = _load_model_worker_qwen(model_path)
+
+    # Apply chat template to format messages
+    formatted_prompt = tokenizer.apply_chat_template(
+        messages,
+        tokenize=False,
+        add_generation_prompt=True
+    )
+
+    # Tokenize input
+    inputs = tokenizer(
+        formatted_prompt,
+        return_tensors="pt",
+        truncation=True
+    )
+
+    # Generate
+    outputs = model.generate(
+        inputs["input_ids"],
+        num_beams=4,
+        do_sample=True,
+        temperature=0.7,
+        pad_token_id=tokenizer.pad_token_id,
+        eos_token_id=tokenizer.eos_token_id
+    )
+
+    # Decode output (skip the input prompt)
+    input_length = inputs["input_ids"].shape[1]
+    generated_tokens = outputs[0][input_length:]
+    response = tokenizer.decode(generated_tokens, skip_special_tokens=True)
+    print("Response from qwen2-1.5b: ", response)
+    return response
+
+
+def generate_response_local_qwen(context_information: Generator[str, None, None], prompt: str) -> str:
+    """
+    Generate response using local Qwen2-1.5B-Instruct model.
+    This function should be called from an async context using run_in_executor.
+    """
+    # Determine model path
+    model_path = settings.qwen2_model_path or "Qwen/Qwen2-1.5B-Instruct"
+
+    # Extract context from generator
+    context_text = _extract_context_from_generator(context_information)
+
+    # Format messages for Qwen2 (chat-based model)
+    messages = [
+        {"role": "system", "content": GENERATION_SYSTEM_PROMPT},
+        {"role": "user", "content": GENERATION_USER_PROMPT.format(context_information=context_text, query=prompt)}
+    ]
+
+    # Run model inference (this will be called in a worker process)
+    print("Messages for qwen2-1.5b: ", messages)
+    response = _generate_with_qwen(model_path, messages)
     return response

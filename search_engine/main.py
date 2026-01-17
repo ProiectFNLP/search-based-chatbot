@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from multiprocessing import Pool
 from typing import Literal, Optional
 
-from llm_api import generate_response, generate_summary, generate_response_local
+from llm_api import generate_response, generate_summary, generate_response_local, generate_response_local_qwen
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -269,7 +269,7 @@ async def send_prompt(
     session_id: str,
     prompt: str,
     search_mode: Literal['tfidf', 'faiss', 'bm25'] = 'faiss',
-    llm_model: Literal['llama', 'flan-t5-base', 'gpt-5-nano'] = 'llama',
+    llm_model: Literal['llama', 'flan-t5-base', 'gpt-5-nano', 'qwen2-1.5b'] = 'llama',
     file_cache: FileCache = Depends(get_file_cache)
 ):
     """
@@ -311,7 +311,7 @@ async def send_prompt(
     if llm_model == 'flan-t5-base':
         # Collect all results from generator before passing to worker process
         # (generators can't be pickled for process pool)
-        print("Using local model")
+        print("Using local Flan-T5 model")
         print(results)
         results_list = list(results)
         print(results_list)
@@ -320,6 +320,21 @@ async def send_prompt(
         response = await loop.run_in_executor(
             pool_executor.executor,
             generate_response_local,
+            iter(results_list),  # Convert back to generator for the function
+            prompt
+        )
+    elif llm_model == 'qwen2-1.5b':
+        # Collect all results from generator before passing to worker process
+        # (generators can't be pickled for process pool)
+        print("Using local Qwen2-1.5B-Instruct model")
+        print(results)
+        results_list = list(results)
+        print(results_list)
+        # Run local model in process pool to avoid blocking
+        loop = asyncio.get_running_loop()
+        response = await loop.run_in_executor(
+            pool_executor.executor,
+            generate_response_local_qwen,
             iter(results_list),  # Convert back to generator for the function
             prompt
         )
