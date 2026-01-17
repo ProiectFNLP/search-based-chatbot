@@ -269,7 +269,7 @@ async def send_prompt(
     session_id: str,
     prompt: str,
     search_mode: Literal['tfidf', 'faiss', 'bm25'] = 'faiss',
-    llm_model: Literal['llama', 'flan-t5-base', 'gpt-4o-mini'] = 'llama',
+    llm_model: Literal['llama', 'flan-t5-base', 'gpt-5-nano'] = 'llama',
     file_cache: FileCache = Depends(get_file_cache)
 ):
     """
@@ -324,7 +324,8 @@ async def send_prompt(
             prompt
         )
     else:
-        response = generate_response(results, prompt)
+        print(f"=== Selected LLM model: {llm_model} ===")
+        response = generate_response(results, prompt, llm_model)
     print("Generated response:", response)
 
     # Save summary of conversation (not supported for local model)

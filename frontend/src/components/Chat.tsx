@@ -23,7 +23,7 @@ export default function Chat({
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
     const [searchMode, setSearchMode] = useState<SearchType>("TF-IDF");
-    const [llmModel, setLlmModel] = useState<LlmModelType>("gpt-4o-mini");
+    const [llmModel, setLlmModel] = useState<LlmModelType>("gpt-5-nano");
     const listRef = useRef<HTMLDivElement | null>(null);
     const eventSourceRef = useRef<EventSource | null>(null);
 
