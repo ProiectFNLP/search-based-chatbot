@@ -1,4 +1,4 @@
-import {useRef, useState} from "react";
+import {useRef, useState, useEffect} from "react";
 import {pdfjs} from "react-pdf";
 import "react-pdf/dist/esm/Page/AnnotationLayer.css";
 import "react-pdf/dist/esm/Page/TextLayer.css";
@@ -8,6 +8,7 @@ import SearchPanel from "./components/SearchPanel";
 import {assert_error} from "./assertions.ts";
 import type {DragEvent} from "react";
 import {uploadEndpoint} from "./utils/api.ts";
+import {useChat} from './contexts/ChatContext';
 import {IoChatboxOutline} from "react-icons/io5";
 import {FaSearch} from "react-icons/fa";
 
@@ -25,6 +26,12 @@ function App() {
     const [currentPage, setCurrentPage] = useState(1);
     const [session_id, setSessionId] = useState<string>();
     const [uploading, setUploading] = useState(false);
+    const { clearMessages } = useChat();
+
+    // Clear chat when the current document/session changes
+    useEffect(() => {
+        clearMessages();
+    }, [pdfFile, session_id]);
 
     const handleNewDocument = () => fileInputRef.current?.click();
 
@@ -50,6 +57,8 @@ function App() {
         try {
             const {session_id} = await uploadEndpoint(formData, {});
             setSessionId(session_id);
+            // new document uploaded -> clear previous chat
+            clearMessages();
         } catch (error: unknown) {
             if(!assert_error(error)) return;
             console.error("Error uploading PDF:", error);

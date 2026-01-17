@@ -4,9 +4,9 @@ import {FaPaperclip, FaRegTrashAlt} from "react-icons/fa";
 import {assert_error} from "../assertions.ts";
 import {sendPromptEndpoint} from "../utils/api.ts";
 import {MessageBubble} from "./MessageBubble.tsx";
-import type {Message} from "../types/messageTypes.ts";
-import {type SearchType, SearchTypeValues} from "../types/searchTypes.ts";
-import {type LlmModelType, LlmModelTypeValues} from "../types/llmModelTypes.ts";
+import {useChat} from '../contexts/ChatContext';
+import {type SearchType, SearchTypeValues} from "../types/searchTypes";
+import {type LlmModelType, LlmModelTypeValues} from "../types/llmModelTypes";
 
 type Props = {
     setPdfFile: (f?: File) => void;
@@ -19,10 +19,9 @@ export default function Chat({
                                  handleNewDocument,
                                  session_id
                              }: Props) {
-    const [messages, setMessages] = useState<Message[]>([]);
+    const {messages, addUserMessage, addAssistantPlaceholder, appendStreamingChunk, finalizeMessage} = useChat();
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
-    const [messageCounter, setMessageCounter] = useState(0);
     const [searchMode, setSearchMode] = useState<SearchType>("TF-IDF");
     const [llmModel, setLlmModel] = useState<LlmModelType>("gpt-4o-mini");
     const listRef = useRef<HTMLDivElement | null>(null);
@@ -32,15 +31,9 @@ export default function Chat({
         if (!session_id) return;
         const trimmedMessage = input.trim();
         if (!trimmedMessage) return;
-        let msgId = messageCounter;
-        const msg: Message = {
-            id: String(msgId++),
-            text: trimmedMessage,
-            fromUser: true,
-            streamingChunk: "",
-            isStreaming: false
-        };
-        setMessages((m) => [...m, msg]);
+
+        // add user message to global context
+        addUserMessage(trimmedMessage);
         setInput('');
 
         if (eventSourceRef.current) {
@@ -60,18 +53,10 @@ export default function Chat({
                 search_mode: searchMode.toLowerCase().replace("-", ""),
                 llm_model: llmModel,
             }));
-            // const eventSource: EventSource = new EventSource(sendMessageDummyEndpoint({
-            //     session_id,
-            //     message: trimmedMessage,
-            // }));
-            setMessages((m) => [...m, {
-                id: String(msgId++),
-                text: '',
-                fromUser: false,
-                streamingChunk: "",
-                isStreaming: true
-            }]);
-            setMessageCounter(msgId);
+
+            // add assistant placeholder
+            const assistantId = addAssistantPlaceholder();
+
             eventSourceRef.current = eventSource;
 
             eventSource.onmessage = (event) => {
@@ -84,30 +69,10 @@ export default function Chat({
                     } catch (e) { /* ignore */
                     }
                     if (eventSourceRef.current === eventSource) eventSourceRef.current = null;
-                    setMessages(prev => {
-                        const last = prev[prev.length - 1];
-                        return [
-                            ...prev.slice(0, -1),
-                            {...last, isStreaming: false, streamingChunk: "", text: last.text + last.streamingChunk},
-                        ];
-                    });
+                    finalizeMessage(assistantId);
                     setLoading(false);
                 } else {
-                    setMessages(prev => {
-                        const last = prev[prev.length - 1];
-
-                        if (!last || last.fromUser) return prev;
-
-                        return [
-                            ...prev.slice(0, -1),
-                            {
-                                ...last,
-                                text: last.text + last.streamingChunk,
-                                isStreaming: true,
-                                streamingChunk: data.response,
-                            }
-                        ];
-                    });
+                    appendStreamingChunk(assistantId, data.response || "");
                 }
             };
 
