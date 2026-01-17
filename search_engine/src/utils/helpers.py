@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import shutil
 from typing import Generator, Optional
 
@@ -42,9 +43,19 @@ def extract_paragraphs_from_page(text: str) -> Generator[str, None, None]:
     :return: Generator yielding paragraphs from the page.
     """
 
-    paragraphs = text.split("\n\n")
+    # Normalize whitespaces
+    normalized_text = re.sub(r'[^\S\n]+', ' ', text)
+
+    # Split by paragraphs
+    split_pattern = r'\n\n|\n \n|[.!?;]\s*\n'
+
+    # Remove extra newlines
+    extra_newlines = r'\n(?=[a-z])'
+
+    paragraphs = re.split(split_pattern, normalized_text)
     for paragraph in paragraphs:
         if paragraph.strip():
+            paragraph = re.sub(extra_newlines, '', paragraph.strip())
             yield paragraph
 
 

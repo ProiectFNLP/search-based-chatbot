@@ -18,24 +18,28 @@ except ImportError:
 
 GENERATION_SYSTEM_PROMPT = """
     You are a retrieval-augmented generation (RAG) assistant.
-    Your task is to answer user questions using only the provided contextual information.
-    If the context does not contain enough information to answer the question, state that explicitly.
-    Do not invent facts or rely on external knowledge.
-    Respond clearly and concisely.
-    Always indicate the context snippets you used in your answer by quoting them (e.g., in double quotes "").
+
+    Answer the user question using the information present in the retrieved context.
+    Do NOT add external knowledge or assumptions.
+
+    Write the answer in your own words, in a clear and concise manner.
+    Do NOT copy full sentences verbatim from the context.
+
+    After the answer, provide a short list of quoted context snippets that support it.
+    If the context is insufficient, explicitly say so.
+    Be concise and factual.
     """
 
 
+
 GENERATION_USER_PROMPT = """
-    User query:
+    User question:
     {query}
 
     Retrieved context:
     {context_information}
-
-    Using only the retrieved context, produce the best possible answer to the user query.
-    Include in your answer the specific context snippets you are basing your response on, quoted in double quotes "".
     """
+
 
 
 SUMMARY_SYSTEM_PROMPT = """
@@ -127,7 +131,7 @@ def send_request(messages: list[dict[str, str]]) -> str:
         print("  Please install ollama: pip install ollama")
         print("  And ensure Ollama service is running: ollama serve")
         return "Error: Ollama is not available. Please install ollama package and start the Ollama service."
-    
+
     # response = client.chat.completions.create(
     #     model="gpt-4o-mini",
     #     messages=messages
@@ -157,13 +161,13 @@ def _load_model_worker(model_path: str):
     This function is called in the worker process to cache the model.
     """
     from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
-    
+
     if model_path not in _model_cache:
         print(f"Loading Flan-T5 model from: {model_path}")
         _tokenizer_cache[model_path] = AutoTokenizer.from_pretrained(model_path)
         _model_cache[model_path] = AutoModelForSeq2SeqLM.from_pretrained(model_path)
         print(f"Model loaded successfully")
-    
+
     return _model_cache[model_path], _tokenizer_cache[model_path]
 
 
@@ -173,10 +177,10 @@ def _generate_with_flan_t5(model_path: str, prompt_text: str) -> str:
     This function runs in a worker process.
     """
     model, tokenizer = _load_model_worker(model_path)
-    
+
     # Tokenize input
     inputs = tokenizer(prompt_text, return_tensors="pt", max_length=512, truncation=True)
-    
+
     # Generate
     outputs = model.generate(
         inputs["input_ids"],
@@ -185,10 +189,10 @@ def _generate_with_flan_t5(model_path: str, prompt_text: str) -> str:
         early_stopping=True,
         do_sample=False
     )
-    
+
     # Decode output
     response = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    print("resposne from flan-t5-base: ", response)
+    print("Response from flan-t5-base: ", response)
     return response
 
 
@@ -198,7 +202,7 @@ def _extract_context_from_generator(context_information: Generator[str, None, No
     The generator yields JSON-formatted strings like: "data: {...}\n\n"
     """
     context_parts = []
-    
+
     for item in context_information:
         # Parse the JSON string (format: "data: {...}\n\n")
         if item.startswith("data: "):
@@ -214,7 +218,7 @@ def _extract_context_from_generator(context_information: Generator[str, None, No
                             context_parts.append(paragraph)
             except json.JSONDecodeError:
                 continue
-    
+
     # Combine all paragraphs into a single context string
     context_text = "\n\n".join(context_parts)
     return context_text
@@ -227,24 +231,17 @@ def generate_response_local(context_information: Generator[str, None, None], pro
     """
     # Determine model path
     model_path = settings.flan_t5_model_path or "google/flan-t5-base"
-    
+
     # Extract context from generator
     context_text = _extract_context_from_generator(context_information)
-    
+
     # Format prompt for Flan-T5 (text-to-text model, not chat-based)
     # Combine system and user prompts into a single text input
-    full_prompt = f"""{GENERATION_SYSTEM_PROMPT.strip()}
+    generation_user_prompt = GENERATION_USER_PROMPT.format(context_information=context_text, query=prompt)
 
-User query: {prompt}
+    full_prompt = generation_user_prompt + "\n\n" + GENERATION_SYSTEM_PROMPT
 
-Retrieved context:
-{context_text}
-
-Using only the retrieved context, produce the best possible answer to the user query.
-Include in your answer the specific context snippets you are basing your response on, quoted in double quotes ""."""
-    
     # Run model inference (this will be called in a worker process)
     print("full_prompt: ", full_prompt)
     response = _generate_with_flan_t5(model_path, full_prompt)
-    print("response from flan-t5-base: ", response)
     return response
