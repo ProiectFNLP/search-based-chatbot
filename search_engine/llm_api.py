@@ -44,6 +44,17 @@ GENERATION_USER_PROMPT = """
     """
 
 
+LOCAL_MODEL_SYSTEM_PROMPT = """
+    Answer the user question using the information in the retrieved context.
+    """
+
+LOCAL_MODEL_USER_PROMPT = """
+    User question:
+    {query}
+
+    Retrieved context:
+    {context_information}
+    """
 
 SUMMARY_SYSTEM_PROMPT = """
     You are a conversation summarization assistant.
@@ -205,7 +216,12 @@ def _generate_with_flan_t5(model_path: str, prompt_text: str) -> str:
         max_length=512,
         num_beams=4,
         early_stopping=True,
-        do_sample=False
+        do_sample=False,
+        # num_beams=1,
+        # #early_stopping=True,
+        # do_sample=True,
+        # top_p=0.9,
+        # temperature=0.7
     )
 
     # Decode output
@@ -257,9 +273,9 @@ def generate_response_local(context_information: Generator[str, None, None], pro
 
     # Format prompt for Flan-T5 (text-to-text model, not chat-based)
     # Combine system and user prompts into a single text input
-    generation_user_prompt = GENERATION_USER_PROMPT.format(context_information=context_text, query=prompt)
+    generation_user_prompt = LOCAL_MODEL_USER_PROMPT.format(context_information=context_text, query=prompt, conversation_summary="")
 
-    full_prompt = generation_user_prompt + "\n\n" + GENERATION_SYSTEM_PROMPT
+    full_prompt = LOCAL_MODEL_SYSTEM_PROMPT + "\n\n" + generation_user_prompt
 
     # Run model inference (this will be called in a worker process)
     print("full_prompt: ", full_prompt)
