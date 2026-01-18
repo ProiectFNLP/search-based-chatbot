@@ -8,12 +8,16 @@ nlp = load_spacy_model("en_core_web_sm")
 def lemmatize(text: str, nlp_preprocess = None) -> str:
     if nlp_preprocess is None:
         nlp_preprocess = nlp(text)
+    tokens = [(token.text, token.lemma_, token.is_punct) for token in nlp_preprocess]
+    print(f"   🔤 Lemmatization tokens: {tokens}")
     return " ".join([token.lemma_ for token in nlp_preprocess if not token.is_punct])
 
 def remove_stopwords(text) -> str:
     return " ".join([word for word in text.split() if word not in ENGLISH_STOP_WORDS])
 
 def preprocess_document(document: str, nlp_preprocess = None) -> str:
+    print(f"🔤 PREPROCESSING: Original text = '{document}'")
+
     # Lowercase
     document = document.lower()
     # Remove non-alphanumeric characters
@@ -25,5 +29,6 @@ def preprocess_document(document: str, nlp_preprocess = None) -> str:
     text = text.lower()
     # Remove stopwords
     text = remove_stopwords(text)
+    print(f"🔤 PREPROCESSING: After stopword removal = '{text}'")
 
     return text

@@ -6,6 +6,7 @@ from typing import Generator, Optional
 
 import fitz
 import torch
+
 from sentence_transformers import SentenceTransformer
 
 from src.constants import TOP_K
@@ -86,9 +87,9 @@ def search_in_dataset(
     elif isinstance(dataset, DenseChunkedDocumentDataset):
         device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
         model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2", device=device)
-        generator = search_faiss(search, dataset, model, TOP_K)
+        generator = search_faiss(search, dataset, model, TOP_K, file_cache)
     elif isinstance(dataset, Bm25ChunkedDocumentDataset):
-        generator = search_bm25(search, dataset)
+        generator = search_bm25(search, dataset, file_cache)
 
     length = len(dataset)
 
@@ -104,5 +105,4 @@ def search_in_dataset(
             "total": length
         }
         yield f"data: {json.dumps(data)}\n\n"
-
 

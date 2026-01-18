@@ -70,10 +70,20 @@ class TfIdfBaseDocumentDataset(torch.utils.data.Dataset, ABC):
         preprocessed, documents = zip(*documents)
 
         if cached is None:
+            print(f"📊 ENCODING: No cache found - creating TF-IDF vectorizer and fitting documents")
+            print(f"📊 ENCODING: First 3 preprocessed texts:")
+            for i, text in enumerate(list(preprocessed)[:3]):
+                # Handle both bytes and strings
+                if isinstance(text, bytes):
+                    text = text.decode('utf-8')
+                print(f"   [{i}] {text[:100]}{'...' if len(text) > 100 else ''}")
+
             vectorizer = TfidfVectorizer()
             tfidf = vectorizer.fit_transform(preprocessed) # type: ignore
+            print(f"📊 ENCODING: ✓ Vectorization complete! Shape: {tfidf.shape}, Vocab size: {len(vectorizer.vocabulary_)}")
         else:
             vectorizer, tfidf = cached
+            print(f"📊 ENCODING: ✓ Using cached TF-IDF with shape {tfidf.shape}")
 
         return {
             "documents": documents,
@@ -144,6 +154,7 @@ class TfIdfChunkedDocumentDataset(torch.utils.data.Dataset):
             cached = self.cache.get_pickled(str(idx))
 
         result = self._get(idx, cached)
+
         if self.cache is not None and cached is None:
             self.cache.set_pickled(str(idx), (result["vectorizer"], result["tfidf"]))
 

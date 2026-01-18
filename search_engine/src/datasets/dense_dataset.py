@@ -66,13 +66,23 @@ class BaseDenseDocumentDataset(torch.utils.data.Dataset, ABC):
         preprocessed, documents = zip(*documents)
 
         if cached is None:
+            print(f"📊 ENCODING: No cache found - encoding documents with model {model}")
+            print(f"📊 ENCODING: First 3 preprocessed texts:")
+            for i, text in enumerate(list(preprocessed)[:3]):
+                # Handle both bytes and strings
+                if isinstance(text, bytes):
+                    text = text.decode('utf-8')
+                print(f"   [{i}] {text[:100]}{'...' if len(text) > 100 else ''}")
+
             embeddings = model.encode(
                 preprocessed,
                 convert_to_numpy=True,
                 batch_size=32,
                 show_progress_bar=True
             )
+            print(f"📊 ENCODING: ✓ Encoding complete! Shape: {embeddings.shape}, Dtype: {embeddings.dtype}")
         else:
+            print(f"📊 ENCODING: ✓ Using cached embeddings with shape {cached.shape}")
             embeddings = cached
 
         return {
@@ -142,7 +152,7 @@ class DenseChunkedDocumentDataset(torch.utils.data.Dataset):
             except Exception as e:
                 print(f"Could not load index from {index_path}. Error: {e}")
                 self.index = None
-       
+
         if self.index is None:  # If no index found, create a new one
             self.index = IndexFlatIP(EMBEDDINGS_DIMENSION)
 

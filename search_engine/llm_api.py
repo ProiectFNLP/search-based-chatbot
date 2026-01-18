@@ -75,6 +75,8 @@ LLAMA_MODEL = "llama3.2"
 LLAMA_URL = "http://localhost:11434/api/generate"
 
 def generate_response(context_results, prompt, model):
+    print(f"🤖 LLM GENERATE_RESPONSE STARTED")
+
     # Extract context for all models
     context_list = list(context_results)
     context_text = "\n".join(context_list[:3])
@@ -88,12 +90,20 @@ def generate_response(context_results, prompt, model):
 
         # Construiește textul complet trimis la LLaMA
         full_prompt = GENERATION_USER_PROMPT.format(query=prompt, context_information=context_text)
+
+        print(f"🦙 LLAMA: Full prompt:")
+        print(f"{'─'*60}")
         print(full_prompt)
+        print(f"{'─'*60}")
+
         # Generează răspuns folosind modelul local LLaMA
         try:
+            print(f"🦙 LLAMA: Sending request to Ollama...")
             result = generate(LLAMA_MODEL, full_prompt)
             # Returnează doar textul generat
             response = result.response
+            print(f"🦙 LLAMA: ✓ Response received")
+            print(f"   {response[:200]}{'...' if len(response) > 200 else ''}")
             return response
         except Exception as e:
             print(f"❌ ERROR: Failed to generate response with Ollama: {e}")
@@ -105,7 +115,17 @@ def generate_response(context_results, prompt, model):
             {"role": "system", "content": GENERATION_SYSTEM_PROMPT},
             {"role": "user", "content": GENERATION_USER_PROMPT.format(context_information=context_text, query=prompt)}
         ]
-        return send_request(messages, model)
+        print(f"🤖 GPT: Contexts:")
+        print(f"{'─'*60}")
+        for i, msg in enumerate(messages):
+            print(f"  Message {i} ({msg['role']}):")
+            content_preview = msg['content'][:300] + '...' if len(msg['content']) > 300 else msg['content']
+            print(f"    {content_preview}")
+        print(f"{'─'*60}")
+
+        response = send_request(messages, model)
+        print(f"{'='*60}\n")
+        return response
     elif model == 'flan-t5-base':
         # Use local Flan-T5
         return generate_response_local(context_results, prompt)
@@ -115,12 +135,16 @@ def generate_response(context_results, prompt, model):
 
 def generate_summary(prompt: str, answer: str, conversation_summary: str) -> str:
 
+    print(f"📝 SUMMARY: Prompt = '{prompt[:100]}{'...' if len(prompt) > 100 else ''}'")
+
     messages = [
         {"role": "system", "content": SUMMARY_SYSTEM_PROMPT},
         {"role": "user", "content": SUMMARY_USER_PROMPT.format(query=prompt, answer=answer, conversation_summary=conversation_summary)}
     ]
 
     response = send_request(messages)
+    print(f"📝 SUMMARY: New summary preview:")
+    print(f"   {response[:200]}{'...' if len(response) > 200 else ''}")
     return response
 
 def send_request(messages: list[dict[str, str]], model='llama') -> str:
@@ -149,7 +173,11 @@ def send_request(messages: list[dict[str, str]], model='llama') -> str:
                 model="gpt-5-nano",
                 messages=messages
             )
-            return response.choices[0].message.content
+            content = response.choices[0].message.content
+            if content:
+                print(f"🤖 GPT API: Response preview:")
+                print(f"   {content[:200]}{'...' if len(content) > 200 else ''}")
+            return content
         except Exception as e:
             print(f"❌ ERROR: Failed to send request to OpenAI: {e}")
             return f"Error sending request: {str(e)}"
