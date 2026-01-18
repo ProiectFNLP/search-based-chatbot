@@ -198,7 +198,7 @@ async def _search(session_id: str, search: str, file_cache: FileCache, mode: Lit
             print(f"  Base dataset length (documents): {dataset.dataset.length}")
         if hasattr(dataset.dataset, 'document_cache'):
             print(f"  Document cache type: {type(dataset.dataset.document_cache).__name__}")
-    
+
     # Print sample documents from the dataset (first 2 chunks, first document in each)
     print("\nSample documents from dataset:")
     try:
@@ -215,7 +215,7 @@ async def _search(session_id: str, search: str, file_cache: FileCache, mode: Lit
                 print(f"  Chunk {i} ({len(chunk['document'])} chars): {doc_preview}")
     except Exception as e:
         print(f"  Could not read sample documents: {e}")
-    
+
     print("\nSEARCH PARAMETERS:")
     print(f"  Search query: '{search}'")
     print(f"  Search mode: {mode}")
@@ -325,12 +325,14 @@ async def send_prompt(
         )
     else:
         print(f"=== Selected LLM model: {llm_model} ===")
-        response = generate_response(results, prompt, llm_model)
+        response = generate_response(results, prompt, llm_model, conversation_summary)
     print("Generated response:", response)
 
     # Save summary of conversation (not supported for local model)
-    # conversation_summary = generate_summary(prompt, response, conversation_summary)
-    # pdf_cache.set(f"conversation_summary:{session_id}", conversation_summary)
+    if llm_model != 'flan-t5-base':
+        conversation_summary = generate_summary(prompt, response, conversation_summary)
+        print(f"\n 🔍 Conversation summary: {conversation_summary}")
+        pdf_cache.set(f"conversation_summary:{session_id}", conversation_summary)
 
     # Return response
     async def generator():

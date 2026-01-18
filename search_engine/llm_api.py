@@ -24,10 +24,9 @@ GENERATION_SYSTEM_PROMPT = """
     Do NOT add external knowledge or assumptions.
 
     Write the answer in your own words, in a clear and concise manner.
-    Do NOT copy full sentences verbatim from the context.
 
-    After the answer, provide a short list of quoted context snippets that support it.
     If the context is insufficient, explicitly say so.
+    You can use the conversation summary to help you answer the question.
     Be concise and factual.
     """
 
@@ -39,6 +38,9 @@ GENERATION_USER_PROMPT = """
 
     Retrieved context:
     {context_information}
+
+    Conversation summary:
+    {conversation_summary}
     """
 
 
@@ -46,7 +48,7 @@ GENERATION_USER_PROMPT = """
 SUMMARY_SYSTEM_PROMPT = """
     You are a conversation summarization assistant.
     Your task is to maintain a concise, up-to-date summary of a conversation between a user and an assistant.
-    The summary should preserve important facts, decisions, and context needed for future turns.
+    The summary should only preserve important facts.
     Avoid redundancy and remove obsolete or repeated information.
     """
 
@@ -60,6 +62,7 @@ SUMMARY_USER_PROMPT = """
 
     Update the conversation summary by integrating the new exchange.
     Rewrite the summary if necessary to keep it concise, non-redundant, and accurate.
+    Keep the summary as short as possible.
     Return only the updated summary.
     """
 
@@ -74,7 +77,7 @@ def get_openai_client():
 LLAMA_MODEL = "llama3.2"
 LLAMA_URL = "http://localhost:11434/api/generate"
 
-def generate_response(context_results, prompt, model):
+def generate_response(context_results, prompt, model, conversation_summary: str):
     # Extract context for all models
     context_list = list(context_results)
     context_text = "\n".join(context_list[:3])
@@ -87,7 +90,11 @@ def generate_response(context_results, prompt, model):
             return "Error: Ollama is not available. Please install ollama package and start the Ollama service."
 
         # Construiește textul complet trimis la LLaMA
-        full_prompt = GENERATION_USER_PROMPT.format(query=prompt, context_information=context_text)
+        full_prompt = GENERATION_USER_PROMPT.format(
+            query=prompt,
+            context_information=context_text,
+            conversation_summary=conversation_summary
+        )
         print(full_prompt)
         # Generează răspuns folosind modelul local LLaMA
         try:
@@ -103,8 +110,14 @@ def generate_response(context_results, prompt, model):
     elif model == 'gpt-5-nano':
         messages = [
             {"role": "system", "content": GENERATION_SYSTEM_PROMPT},
-            {"role": "user", "content": GENERATION_USER_PROMPT.format(context_information=context_text, query=prompt)}
+            {"role": "user", "content": GENERATION_USER_PROMPT.format(
+                context_information=context_text,
+                query=prompt,
+                conversation_summary=conversation_summary
+                )
+            }
         ]
+        print(messages)
         return send_request(messages, model)
     elif model == 'flan-t5-base':
         # Use local Flan-T5
