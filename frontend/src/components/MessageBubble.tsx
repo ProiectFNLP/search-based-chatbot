@@ -10,7 +10,7 @@ export const MessageBubble = ({message} :{message: Message}) => {
 
     return (
         <div
-            className={`px-3 py-2 rounded-xl max-w-[80%]
+            className={`px-3 py-2 rounded-xl max-w-[80%] whitespace-pre-line
                     ${message.fromUser
                 ? "self-end bg-primary-100 text-primary-900"
                 : "self-start bg-gray-200 text-gray-900"
